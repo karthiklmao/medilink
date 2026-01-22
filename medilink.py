@@ -85,6 +85,18 @@ st.markdown("""
         box-shadow: 0 4px 14px rgba(129, 83, 85, 0.4) !important;
     }
     
+    /* SECONDARY ACTION BUTTONS (The 'Quick Options') */
+    button[kind="secondary"] {
+        background-color: #FFFFFF !important;
+        color: #272838 !important;
+        border: 1px solid #815355 !important;
+        height: 2.5rem !important;
+        font-weight: 600 !important;
+    }
+    button[kind="secondary"]:hover {
+        background-color: #F0F4F8 !important;
+    }
+    
     /* STATUS BADGE */
     .status-badge {
         background-color: #D0E3ED;
@@ -173,7 +185,7 @@ def create_pdf(summary, action_plan):
 
 def text_to_speech(text, lang_code='en'):
     try:
-        tts = gTTS(text=text[:500], lang=lang_code) # Limit to 500 chars for speed
+        tts = gTTS(text=text[:500], lang=lang_code)
         fp = io.BytesIO()
         tts.write_to_fp(fp)
         return fp
@@ -182,7 +194,12 @@ def text_to_speech(text, lang_code='en'):
 
 def save_to_vault(name, type, content, summary="Pending", data=None, date=None):
     for f in st.session_state.vault:
-        if f['name'] == name: return
+        if f['name'] == name: 
+            # If file exists, update its data if we have new info
+            if summary != "Pending": f['summary'] = summary
+            if data: f['data'] = data
+            return
+            
     st.session_state.vault.append({
         "name": name, 
         "type": type, 
@@ -217,6 +234,7 @@ if st.session_state.page == "Home":
                 file_type = uploaded_file.type
                 evidence = None
                 
+                # Load File
                 if "pdf" in file_type:
                     uploaded_file.seek(0)
                     reader = PyPDF2.PdfReader(uploaded_file)
@@ -232,22 +250,60 @@ if st.session_state.page == "Home":
                     evidence = uploaded_file.read().decode("utf-8")
                     st.text_area("Content", evidence[:200], height=150)
 
+                # Auto-save immediately
                 save_to_vault(uploaded_file.name, "File", evidence)
 
         with col2:
             st.markdown("##### Intelligence Console")
             
-            # --- NEW FEATURE: GLOBAL HEALTH (Language Selector) ---
             lang_options = {"English": "en", "Spanish": "es", "French": "fr", "Hindi": "hi", "Chinese": "zh-CN"}
             selected_lang = st.selectbox("Output Language", list(lang_options.keys()))
             lang_code = lang_options[selected_lang]
 
             if uploaded_file:
-                if st.button("Run Diagnostics", type="primary"):
+                # --- NEW: QUICK ACTION BUTTONS ---
+                st.markdown("**Quick Options:**")
+                q_col1, q_col2 = st.columns(2)
+                
+                with q_col1:
+                    # Option 1: Just go to files
+                    if st.button("📂 Save & View in Files", type="secondary", use_container_width=True):
+                        st.session_state.page = "Files"
+                        st.rerun()
+
+                with q_col2:
+                    # Option 2: Run AI specifically for data and go to Trends
+                    if st.button("📈 Add to Trends & View", type="secondary", use_container_width=True):
+                        client = genai.Client(api_key=api_key)
+                        with st.spinner("Extracting data points..."):
+                            try:
+                                prompt = f"""
+                                Extract numerical health data from this document.
+                                OUTPUT ONLY JSON: [{{"Test":"Name", "Value":0, "Unit":"x"}}]
+                                If no data, return [].
+                                """
+                                response = get_gemini_response(client, evidence, prompt)
+                                # Clean response
+                                txt = response.text
+                                j_start = txt.find("[")
+                                j_end = txt.rfind("]") + 1
+                                if j_start != -1 and j_end != -1:
+                                    data_json = json.loads(txt[j_start:j_end])
+                                    # Update vault with this new data
+                                    save_to_vault(uploaded_file.name, "File", evidence, data=data_json)
+                                
+                                st.session_state.page = "Trends"
+                                st.rerun()
+                            except Exception as e:
+                                st.error("Could not extract data for trends.")
+                
+                st.markdown("---")
+                
+                # --- MAIN ACTION: FULL DIAGNOSTICS ---
+                if st.button("Run Full Diagnostics", type="primary"):
                     client = genai.Client(api_key=api_key)
                     with st.spinner("Analyzing..."):
                         try:
-                            # UPDATED PROMPT: HANDLES LANGUAGE
                             prompt = f"""
                             Act as a senior medical analyst. Response Language: {selected_lang}.
                             TASK 1: SUMMARY. Write a clear summary in {selected_lang}.
@@ -268,28 +324,20 @@ if st.session_state.page == "Home":
 
                             st.session_state.current_report = summary_text
                             st.session_state.current_data = data_json
-                            # Reset diet when new report runs
                             st.session_state.current_diet = ""
                             
-                            for f in st.session_state.vault:
-                                if f['name'] == uploaded_file.name:
-                                    f['summary'] = summary_text
-                                    f['data'] = data_json
+                            save_to_vault(uploaded_file.name, "File", evidence, summary=summary_text, data=data_json)
                             
                         except Exception as e:
                             st.error(f"Error: {e}")
 
                 if st.session_state.current_report:
-                    # --- NEW TABS: Diet & Audio ---
                     tab_sum, tab_diet, tab_chat, tab_export = st.tabs(["📊 Report", "🍎 Diet Plan", "💬 Doc Talk", "📥 Export"])
                     
                     with tab_sum:
                         st.markdown(st.session_state.current_report)
-                        
-                        # --- NEW FEATURE: AUDIO PLAYER ---
                         st.markdown("---")
                         st.caption("🎧 Listen to Summary")
-                        # We use the lang_code mapped earlier (e.g., 'es' for Spanish audio)
                         audio_file = text_to_speech(st.session_state.current_report, lang_code=lang_code[:2]) 
                         if audio_file:
                             st.audio(audio_file, format='audio/mp3')
@@ -300,17 +348,16 @@ if st.session_state.page == "Home":
                             st.bar_chart(df.set_index("Test")['Value'], color="#815355")
 
                     with tab_diet:
-                        # --- NEW FEATURE: DIET GENERATOR ---
                         st.markdown("##### Food is Medicine")
                         if st.button("Generate Meal Plan"):
                             client = genai.Client(api_key=api_key)
-                            diet_prompt = f"Based on this medical summary: '{st.session_state.current_report}', create a strict 3-day meal plan to improve the patient's condition. Language: {selected_lang}."
+                            diet_prompt = f"Based on: '{st.session_state.current_report}', create a 3-day meal plan. Language: {selected_lang}."
                             with st.spinner("Chef AI is cooking..."):
                                 diet_resp = get_gemini_response(client, "Context", diet_prompt)
                                 st.session_state.current_diet = diet_resp.text
                         
                         if st.session_state.current_diet:
-                            st.success("Personalized Plan Created")
+                            st.success("Plan Created")
                             st.markdown(st.session_state.current_diet)
 
                     with tab_chat:
@@ -370,7 +417,7 @@ elif st.session_state.page == "Trends":
             </div>
             """, unsafe_allow_html=True)
         else:
-            st.warning("No numerical data found in your uploaded reports yet.")
+            st.warning("No numerical data found yet. Go to Home > Upload > Click 'Add to Trends'.")
 
 # ================= PAGE 3: FILES =================
 elif st.session_state.page == "Files":
