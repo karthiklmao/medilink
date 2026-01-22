@@ -28,7 +28,7 @@ st.markdown("""
     
     html, body, [class*="css"] {
         font-family: 'DM Sans', sans-serif;
-        color: #272838;
+        color: #272838 !important; /* Force Dark Text everywhere */
     }
     
     .stApp {
@@ -54,7 +54,7 @@ st.markdown("""
     div.stButton > button {
         background-color: transparent !important;
         color: #272838 !important;
-        border: none;
+        border: 1px solid transparent;
         height: 3rem;
         font-weight: 700;
         font-size: 20px !important;
@@ -66,6 +66,7 @@ st.markdown("""
     
     div.stButton > button:hover {
         background-color: rgba(39, 40, 56, 0.05) !important; 
+        border: 1px solid #9FB7C1 !important;
         border-radius: 8px;
     }
     
@@ -107,7 +108,7 @@ st.markdown("""
         text-align: center;
     }
     
-    h1, h2, h3, h4, h5, h6, p, li { color: #272838; }
+    h1, h2, h3, h4, h5, h6, p, li { color: #272838 !important; }
     .stTextInput input { border: 1px solid #815355; border-radius: 8px; }
     </style>
     """, unsafe_allow_html=True)
@@ -123,13 +124,27 @@ with st.container():
     col_logo, col_nav_buttons, col_status = st.columns([3, 4, 3])
     
     with col_logo:
+        # Check for image, fallback to TEXT if missing (Using !important to force black color)
         if os.path.exists("medilink_logo.png"):
             st.image("medilink_logo.png", width=280)
         else:
-            st.markdown("## MEDILINK")
+            st.markdown("""
+                <h1 style='
+                    font-family: "DM Sans", sans-serif;
+                    font-weight: 900;
+                    font-size: 50px;
+                    color: #272838 !important; 
+                    margin-top: -15px;
+                    margin-bottom: 0px;
+                    line-height: 1;
+                    letter-spacing: -2px;
+                '>
+                    MEDILINK
+                </h1>
+            """, unsafe_allow_html=True)
         
     with col_nav_buttons:
-        st.markdown('<div style="height: 20px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 10px;"></div>', unsafe_allow_html=True)
         nav_1, nav_2, nav_3 = st.columns(3)
         with nav_1:
             if st.button("Home", use_container_width=True): st.session_state.page = "Home"
@@ -139,7 +154,7 @@ with st.container():
             if st.button("Files", use_container_width=True): st.session_state.page = "Files"
                 
     with col_status:
-        st.markdown('<div style="height: 25px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True)
         col_spacer, col_badge = st.columns([1, 2])
         with col_badge:
             st.markdown('<div class="status-badge">● Secure Connection</div>', unsafe_allow_html=True)
@@ -207,20 +222,18 @@ if st.session_state.page == "Home":
     st.markdown("### Home")
     st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
 
-    # --- CRASH FIX: SECURE API KEY CHECK ---
+    # --- CRASH FIX: SAFE API KEY CHECK ---
     api_key = None
     try:
-        # Attempt to access secrets, but catch error if file missing
+        # Safely try to access secrets. If it fails, catch it.
         if "GEMINI_KEY" in st.secrets:
             api_key = st.secrets["GEMINI_KEY"]
-    except:
-        # If no secrets file, pass (don't crash)
-        pass
+    except Exception:
+        pass # Ignore the missing file error
 
-    # If key wasn't found in secrets, show input box
+    # If key wasn't found automatically, ask user
     if not api_key:
-        api_key = st.text_input("License Key", type="password")
-    # --- END CRASH FIX ---
+        api_key = st.text_input("License Key (Required)", type="password", help="Enter your Gemini API key here")
 
     if api_key:
         col1, col2 = st.columns([1, 2], gap="large")
@@ -387,7 +400,7 @@ elif st.session_state.page == "Trends":
         else:
             st.warning("No numerical data found yet. Go to Home > Upload > Click 'Add to Trends'.")
 
-# ================= PAGE 3: FILES (CRASH FIXED) =================
+# ================= PAGE 3: FILES =================
 elif st.session_state.page == "Files":
     st.markdown("### Secure Archive")
     if not st.session_state.vault:
