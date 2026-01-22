@@ -5,13 +5,15 @@ from PIL import Image
 import pandas as pd
 import json
 import time
+from fpdf import FPDF
+import io
 
 # --- 1. PAGE CONFIG ---
 st.set_page_config(
     page_title="MediLink",
     page_icon=None,
     layout="wide",
-    initial_sidebar_state="collapsed" # Hides the empty sidebar
+    initial_sidebar_state="collapsed"
 )
 
 # --- 2. BOUTIQUE EARTH THEME CSS ---
@@ -25,14 +27,9 @@ st.markdown("""
     }
     
     .stApp {
-        background-color: #FFF5F5; /* Snow Background */
+        background-color: #FFF5F5;
     }
 
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-
-    /* --- TOP NAVIGATION BAR CONTAINER --- */
     div[data-testid="stVerticalBlock"] > div:has(div.nav-button) {
         background-color: white;
         padding: 1rem;
@@ -41,8 +38,7 @@ st.markdown("""
         margin-bottom: 2rem;
     }
 
-    /* CARDS */
-    div.stExpander, div[data-testid="stFileUploader"], div.stDataFrame {
+    div.stExpander, div[data-testid="stFileUploader"], div.stDataFrame, div[data-testid="stChatInput"] {
         background: #FFFFFF;
         border-radius: 12px;
         padding: 20px;
@@ -50,43 +46,32 @@ st.markdown("""
         box-shadow: 0px 4px 20px rgba(39, 35, 30, 0.03);
     }
     
-    /* --- NAVIGATION BUTTONS (Dark Slate Gray) --- */
+    /* BUTTON STYLING */
     div.stButton > button {
         background-color: #3A5253 !important; 
-        color: #FFFFFF !important; /* Force White Text */
+        color: #FFFFFF !important;
         border-radius: 8px;
         border: none;
-        height: 2.5rem; /* Slightly shorter for top bar */
+        height: 2.5rem;
         font-weight: 500;
         transition: all 0.3s ease;
         width: 100%;
     }
-    
     div.stButton > button:hover {
         background-color: #27231E !important; 
-        color: #FFFFFF !important;
         box-shadow: 0 4px 12px rgba(58, 82, 83, 0.2);
     }
-    
-    div.stButton > button:focus:not(:active) {
-        color: #FFFFFF !important;
-        background-color: #3A5253 !important;
-    }
-    
-    div.stButton > button p {
-        color: #FFFFFF !important; 
-    }
+    div.stButton > button p { color: #FFFFFF !important; }
 
-    /* PRIMARY ACTION BUTTON (Burnt Sienna) */
+    /* PRIMARY ACTION BUTTON */
     button[kind="primary"] {
         background-color: #E07A5F !important;
-        height: 3rem !important; /* Taller for main action */
+        height: 3rem !important;
     }
     button[kind="primary"]:hover {
         background-color: #C85D40 !important;
     }
     
-    /* LOGO TEXT */
     .logo-text {
         font-weight: 700;
         font-size: 24px;
@@ -95,7 +80,6 @@ st.markdown("""
         padding-top: 5px;
     }
     
-    /* STATUS INDICATOR */
     .status-badge {
         background-color: #E6F4F1;
         color: #3A5253;
@@ -108,41 +92,36 @@ st.markdown("""
     }
     
     h1, h2, h3 { color: #27231E; }
-    .stTextInput input {
-        border: 1px solid #81B29A;
-        border-radius: 8px;
-    }
+    .stTextInput input { border-radius: 8px; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 3. SESSION STATE ---
 if "vault" not in st.session_state: st.session_state.vault = []
 if "page" not in st.session_state: st.session_state.page = "Home"
+if "current_report" not in st.session_state: st.session_state.current_report = ""
+if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
 # --- 4. TOP NAVIGATION BAR ---
-# We create a container to hold the top bar elements
 with st.container():
-    # Layout: Logo (Left) | Nav Buttons (Middle) | Status (Right)
-    col_logo, col_nav_space, col_nav_buttons, col_end_space, col_status = st.columns([2, 1, 4, 1, 2])
+    col_logo, col_nav_space, col_nav_buttons, col_end_space, col_status = st.columns([2, 1, 6, 1, 2])
     
     with col_logo:
         st.markdown('<p class="logo-text">MEDILINK</p>', unsafe_allow_html=True)
         
     with col_nav_buttons:
-        # Nested columns to center the buttons next to each other
-        nav_1, nav_2 = st.columns(2)
+        nav_1, nav_2, nav_3 = st.columns(3)
         with nav_1:
-            if st.button("Home", use_container_width=True):
-                st.session_state.page = "Home"
+            if st.button("Home", use_container_width=True): st.session_state.page = "Home"
         with nav_2:
-            if st.button("Files", use_container_width=True):
-                st.session_state.page = "Files"
+            if st.button("Trends", use_container_width=True): st.session_state.page = "Trends"
+        with nav_3:
+            if st.button("Files", use_container_width=True): st.session_state.page = "Files"
                 
     with col_status:
-        # A small badge showing the system is secure
         st.markdown('<div class="status-badge">● Secure Connection</div>', unsafe_allow_html=True)
 
-st.markdown("---") # Divider line
+st.markdown("---")
 
 # --- HELPER FUNCTIONS ---
 def get_gemini_response(client, content, prompt):
@@ -157,21 +136,42 @@ def get_gemini_response(client, content, prompt):
                 raise e
     raise Exception("Service busy.")
 
-def save_to_vault(name, type, content, summary="Pending"):
+def create_pdf(summary, action_plan):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(40, 10, 'MediLink AI Health Report')
+    pdf.ln(20)
+    
+    pdf.set_font("Arial", '', 12)
+    # Add content (sanitized for latin-1)
+    content = f"Clinical Summary:\n\n{summary}\n\nAction Plan:\n\n{action_plan}"
+    # Replace common unicode chars that crash FPDF
+    content = content.encode('latin-1', 'replace').decode('latin-1')
+    
+    pdf.multi_cell(0, 10, content)
+    return pdf.output(dest='S').encode('latin-1')
+
+def save_to_vault(name, type, content, summary="Pending", data=None, date=None):
     for f in st.session_state.vault:
         if f['name'] == name: return
-    st.session_state.vault.append({"name": name, "type": type, "content": content, "summary": summary, "timestamp": time.strftime("%H:%M")})
+    st.session_state.vault.append({
+        "name": name, 
+        "type": type, 
+        "content": content, 
+        "summary": summary, 
+        "data": data if data else [],
+        "date": date if date else time.strftime("%Y-%m-%d"),
+        "timestamp": time.strftime("%H:%M")
+    })
 
 # --- PAGE LOGIC ---
 
-# PAGE 1: HOME
+# ================= PAGE 1: HOME =================
 if st.session_state.page == "Home":
-    
-    # Header area
-    st.markdown("### Dashboard")
+    st.markdown("### Home")
     st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
 
-    # API Key Input (if needed)
     if "GEMINI_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_KEY"]
     else:
@@ -189,70 +189,147 @@ if st.session_state.page == "Home":
                 file_type = uploaded_file.type
                 evidence = None
                 
+                # File Processing
                 if "pdf" in file_type:
                     uploaded_file.seek(0)
                     reader = PyPDF2.PdfReader(uploaded_file)
                     text = "".join([p.extract_text() for p in reader.pages])
                     evidence = text
-                    save_to_vault(uploaded_file.name, "PDF", text)
                     st.info(f"{len(reader.pages)} Pages Processed")
-
                 elif "image" in file_type:
                     uploaded_file.seek(0)
                     evidence = Image.open(uploaded_file)
-                    save_to_vault(uploaded_file.name, "Image", evidence)
                     st.image(evidence, use_container_width=True)
-                    
                 elif "text" in file_type:
                     uploaded_file.seek(0)
                     evidence = uploaded_file.read().decode("utf-8")
-                    save_to_vault(uploaded_file.name, "Text", evidence)
                     st.text_area("Content", evidence[:200], height=150)
+
+                # Save raw file immediately
+                save_to_vault(uploaded_file.name, "File", evidence)
 
         with col2:
             st.markdown("##### Intelligence Console")
-            with st.container():
-                if uploaded_file:
-                    if st.button("Run Diagnostics", type="primary"):
-                        client = genai.Client(api_key=api_key)
-                        with st.spinner("Processing..."):
+            if uploaded_file:
+                # ANALYSIS BUTTON
+                if st.button("Run Diagnostics", type="primary"):
+                    client = genai.Client(api_key=api_key)
+                    with st.spinner("Analyzing..."):
+                        try:
+                            # ADVANCED PROMPT
+                            prompt = """
+                            Act as a senior medical analyst. 
+                            TASK 1: SUMMARY. Write a clear summary.
+                            TASK 2: VITALS. JSON list at end: [{"Test":"Name", "Value":0, "Unit":"x"}].
+                            TASK 3: ACTION PLAN. List 3 specific lifestyle changes based on this data.
+                            TASK 4: DATE. Extract the report date as YYYY-MM-DD. If none, say "TODAY".
+                            """
+                            response = get_gemini_response(client, evidence, prompt)
+                            full_text = response.text
+                            
+                            # Parse JSON
                             try:
-                                prompt = """
-                                Medical Analysis.
-                                1. Summary (Plain English).
-                                2. JSON Vitals [{"Test":"Name", "Value":0}].
-                                """
-                                response = get_gemini_response(client, evidence, prompt)
-                                
-                                txt = response.text
-                                try:
-                                    j_start, j_end = txt.rfind("["), txt.rfind("]") + 1
-                                    summary, data = txt[:j_start].strip(), json.loads(txt[j_start:j_end])
-                                except:
-                                    summary, data = txt, []
+                                j_start, j_end = full_text.rfind("["), full_text.rfind("]") + 1
+                                data_part = full_text[j_start:j_end]
+                                data_json = json.loads(data_part)
+                                summary_text = full_text[:j_start].strip()
+                            except:
+                                summary_text = full_text
+                                data_json = []
 
-                                for f in st.session_state.vault:
-                                    if f['name'] == uploaded_file.name: f['summary'] = summary
-                                
-                                st.success("Complete")
-                                st.markdown(summary)
-                                
-                                if data:
-                                    st.markdown("##### Trends")
-                                    df = pd.DataFrame(data)
-                                    df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
-                                    st.bar_chart(df.set_index("Test")['Value'], color="#81B29A")
-                                    
-                            except Exception as e:
-                                st.error(f"Error: {e}")
-                else:
-                    st.info("Awaiting file upload...")
+                            # Update Session State
+                            st.session_state.current_report = summary_text
+                            st.session_state.current_data = data_json
+                            
+                            # Update Vault
+                            for f in st.session_state.vault:
+                                if f['name'] == uploaded_file.name:
+                                    f['summary'] = summary_text
+                                    f['data'] = data_json
+                            
+                        except Exception as e:
+                            st.error(f"Error: {e}")
 
-# PAGE 2: FILES (Vault)
+                # DISPLAY RESULTS
+                if st.session_state.current_report:
+                    # TABS for different views
+                    tab_sum, tab_chat, tab_export = st.tabs(["📊 Report", "💬 Doc Talk", "📥 Export"])
+                    
+                    with tab_sum:
+                        st.markdown(st.session_state.current_report)
+                        if "current_data" in st.session_state and st.session_state.current_data:
+                            df = pd.DataFrame(st.session_state.current_data)
+                            df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
+                            st.bar_chart(df.set_index("Test")['Value'], color="#81B29A")
+
+                    with tab_chat:
+                        st.markdown("##### Ask Dr. AI")
+                        # Chat Interface
+                        user_query = st.text_input("Ask a question about this report:", placeholder="e.g., Is my iron low?")
+                        if user_query:
+                            client = genai.Client(api_key=api_key)
+                            chat_prompt = f"Context: {st.session_state.current_report}. Question: {user_query}. Keep it short and medical."
+                            with st.spinner("Thinking..."):
+                                answer = get_gemini_response(client, "Context Provided", chat_prompt)
+                                st.info(f"**AI:** {answer.text}")
+
+                    with tab_export:
+                        st.markdown("##### Official Download")
+                        if st.button("Generate PDF Report"):
+                            pdf_bytes = create_pdf(st.session_state.current_report, "See Summary for details.")
+                            st.download_button(
+                                label="Download PDF",
+                                data=pdf_bytes,
+                                file_name="medilink_report.pdf",
+                                mime="application/pdf"
+                            )
+            else:
+                st.info("Awaiting file upload...")
+
+# ================= PAGE 2: TRENDS (THE TIME MACHINE) =================
+elif st.session_state.page == "Trends":
+    st.markdown("### Health Trends")
+    st.markdown("Longitudinal analysis of your uploaded records.")
+    
+    if not st.session_state.vault:
+        st.info("Upload multiple reports in 'Home' to see trends here.")
+    else:
+        # AGGREGATE DATA
+        all_vitals = []
+        for f in st.session_state.vault:
+            if f.get('data'):
+                for item in f['data']:
+                    # Flatten data: Test Name, Value, Date
+                    all_vitals.append({
+                        "Date": f['timestamp'], # Using upload time for demo (ideally extract real date)
+                        "Test": item['Test'],
+                        "Value": item['Value']
+                    })
+        
+        if all_vitals:
+            df_trends = pd.DataFrame(all_vitals)
+            df_trends['Value'] = pd.to_numeric(df_trends['Value'], errors='coerce')
+            
+            # Selector
+            tests = df_trends['Test'].unique()
+            selected_test = st.selectbox("Select Vital Sign to Track", tests)
+            
+            # Filter and Plot
+            chart_data = df_trends[df_trends['Test'] == selected_test]
+            st.line_chart(chart_data.set_index("Date")['Value'], color="#E07A5F")
+            
+            # Insight Card
+            st.markdown(f"""
+            <div style="background-color: white; padding: 20px; border-radius: 10px; border-left: 5px solid #E07A5F;">
+                <b>Insight:</b> Tracking <b>{selected_test}</b> across {len(chart_data)} data points.
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.warning("No numerical data found in your uploaded reports yet.")
+
+# ================= PAGE 3: FILES =================
 elif st.session_state.page == "Files":
     st.markdown("### Secure Archive")
-    st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
-
     if not st.session_state.vault:
         st.info("No records found.")
     else:
