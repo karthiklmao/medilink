@@ -19,7 +19,7 @@ st.set_page_config(
 # --- 2. COASTAL THEME CSS ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'DM Sans', sans-serif;
@@ -51,18 +51,19 @@ st.markdown("""
     /* --- TRANSPARENT NAVIGATION BUTTONS --- */
     div.stButton > button {
         background-color: transparent !important;
-        color: #272838 !important;
+        color: #272838 !important; /* TEXT COLOR MATCHES THEME */
         border: none;
-        height: 2.5rem;
+        height: 3rem;
         font-weight: 700;
-        font-size: 18px !important;
+        font-size: 20px !important; /* Made these slightly larger too */
         transition: all 0.3s ease;
         width: 100%;
         text-align: center;
+        padding-top: 5px;
     }
     
     div.stButton > button:hover {
-        background-color: rgba(39, 40, 56, 0.1) !important; 
+        background-color: rgba(39, 40, 56, 0.05) !important; 
         color: #272838 !important;
         border-radius: 8px;
     }
@@ -82,17 +83,6 @@ st.markdown("""
     button[kind="primary"]:hover {
         background-color: #6B4446 !important;
         box-shadow: 0 4px 14px rgba(129, 83, 85, 0.4) !important;
-    }
-    
-    /* --- LOGO TEXT (SUPER SIZED) --- */
-    .logo-text {
-        font-weight: 800;
-        font-size: 65px; /* INCREASED TO 65px */
-        color: #272838;
-        letter-spacing: -2px;
-        line-height: 1.0;
-        padding-top: 0px;
-        margin-bottom: 0px;
     }
     
     /* STATUS BADGE */
@@ -116,19 +106,32 @@ st.markdown("""
 if "vault" not in st.session_state: st.session_state.vault = []
 if "page" not in st.session_state: st.session_state.page = "Home"
 if "current_report" not in st.session_state: st.session_state.current_report = ""
-if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
 # --- 4. TOP NAVIGATION BAR ---
 with st.container():
-    # Adjusted columns to fit the huge logo
-    col_logo, col_nav_space, col_nav_buttons, col_end_space, col_status = st.columns([3.5, 0.5, 5, 0.5, 2])
+    # Adjusted column widths to give logo more space
+    col_logo, col_nav_buttons, col_status = st.columns([4, 5, 2])
     
     with col_logo:
-        st.markdown('<p class="logo-text">MEDILINK</p>', unsafe_allow_html=True)
+        # INLINE CSS TO FORCE SIZE (The "Nuclear Option")
+        st.markdown("""
+            <h1 style='
+                font-family: "DM Sans", sans-serif;
+                font-weight: 900;
+                font-size: 60px;
+                color: #272838;
+                margin-top: -15px;
+                margin-bottom: 0px;
+                line-height: 1;
+                letter-spacing: -2px;
+            '>
+                MEDILINK
+            </h1>
+        """, unsafe_allow_html=True)
         
     with col_nav_buttons:
-        # Pushes buttons down to align with the bottom of the huge logo
-        st.markdown('<div style="height: 25px;"></div>', unsafe_allow_html=True)
+        # Pushes buttons down to vertically align with the center of the big logo
+        st.markdown('<div style="height: 10px;"></div>', unsafe_allow_html=True)
         nav_1, nav_2, nav_3 = st.columns(3)
         with nav_1:
             if st.button("Home", use_container_width=True): st.session_state.page = "Home"
@@ -138,7 +141,7 @@ with st.container():
             if st.button("Files", use_container_width=True): st.session_state.page = "Files"
                 
     with col_status:
-        st.markdown('<div style="height: 30px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True)
         st.markdown('<div class="status-badge">● Secure Connection</div>', unsafe_allow_html=True)
 
 st.markdown("---")
@@ -162,11 +165,9 @@ def create_pdf(summary, action_plan):
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(40, 10, 'MediLink AI Health Report')
     pdf.ln(20)
-    
     pdf.set_font("Arial", '', 12)
     content = f"Clinical Summary:\n\n{summary}\n\nAction Plan:\n\n{action_plan}"
     content = content.encode('latin-1', 'replace').decode('latin-1')
-    
     pdf.multi_cell(0, 10, content)
     return pdf.output(dest='S').encode('latin-1')
 
