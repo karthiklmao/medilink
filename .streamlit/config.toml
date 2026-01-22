@@ -1,7 +1,7 @@
 [theme]
 base = "light"
-primaryColor = "#81B29A"  # Cambridge Blue
-backgroundColor = "#FFF5F5" # Snow (Warm White)
+primaryColor = "#81B29A"
+backgroundColor = "#FFF5F5"
 secondaryBackgroundColor = "#FFFFFF"
-textColor = "#27231E" # Eerie Black
+textColor = "#27231E"
 font = "sans serif"
