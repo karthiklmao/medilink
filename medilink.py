@@ -85,7 +85,7 @@ st.markdown("""
         box-shadow: 0 4px 14px rgba(129, 83, 85, 0.4) !important;
     }
     
-    /* SECONDARY ACTION BUTTONS (The 'Quick Options') */
+    /* SECONDARY ACTION BUTTONS */
     button[kind="secondary"] {
         background-color: #FFFFFF !important;
         color: #272838 !important;
@@ -195,7 +195,6 @@ def text_to_speech(text, lang_code='en'):
 def save_to_vault(name, type, content, summary="Pending", data=None, date=None):
     for f in st.session_state.vault:
         if f['name'] == name: 
-            # If file exists, update its data if we have new info
             if summary != "Pending": f['summary'] = summary
             if data: f['data'] = data
             return
@@ -234,7 +233,6 @@ if st.session_state.page == "Home":
                 file_type = uploaded_file.type
                 evidence = None
                 
-                # Load File
                 if "pdf" in file_type:
                     uploaded_file.seek(0)
                     reader = PyPDF2.PdfReader(uploaded_file)
@@ -250,7 +248,6 @@ if st.session_state.page == "Home":
                     evidence = uploaded_file.read().decode("utf-8")
                     st.text_area("Content", evidence[:200], height=150)
 
-                # Auto-save immediately
                 save_to_vault(uploaded_file.name, "File", evidence)
 
         with col2:
@@ -261,19 +258,16 @@ if st.session_state.page == "Home":
             lang_code = lang_options[selected_lang]
 
             if uploaded_file:
-                # --- NEW: QUICK ACTION BUTTONS ---
                 st.markdown("**Quick Options:**")
                 q_col1, q_col2 = st.columns(2)
                 
                 with q_col1:
-                    # Option 1: Just go to files
-                    if st.button("📂 Save & View in Files", type="secondary", use_container_width=True):
+                    if st.button("Save & View in Files", type="secondary", use_container_width=True):
                         st.session_state.page = "Files"
                         st.rerun()
 
                 with q_col2:
-                    # Option 2: Run AI specifically for data and go to Trends
-                    if st.button("📈 Add to Trends & View", type="secondary", use_container_width=True):
+                    if st.button("Add to Trends & View", type="secondary", use_container_width=True):
                         client = genai.Client(api_key=api_key)
                         with st.spinner("Extracting data points..."):
                             try:
@@ -283,13 +277,11 @@ if st.session_state.page == "Home":
                                 If no data, return [].
                                 """
                                 response = get_gemini_response(client, evidence, prompt)
-                                # Clean response
                                 txt = response.text
                                 j_start = txt.find("[")
                                 j_end = txt.rfind("]") + 1
                                 if j_start != -1 and j_end != -1:
                                     data_json = json.loads(txt[j_start:j_end])
-                                    # Update vault with this new data
                                     save_to_vault(uploaded_file.name, "File", evidence, data=data_json)
                                 
                                 st.session_state.page = "Trends"
@@ -299,7 +291,6 @@ if st.session_state.page == "Home":
                 
                 st.markdown("---")
                 
-                # --- MAIN ACTION: FULL DIAGNOSTICS ---
                 if st.button("Run Full Diagnostics", type="primary"):
                     client = genai.Client(api_key=api_key)
                     with st.spinner("Analyzing..."):
@@ -332,12 +323,12 @@ if st.session_state.page == "Home":
                             st.error(f"Error: {e}")
 
                 if st.session_state.current_report:
-                    tab_sum, tab_diet, tab_chat, tab_export = st.tabs(["📊 Report", "🍎 Diet Plan", "💬 Doc Talk", "📥 Export"])
+                    tab_sum, tab_diet, tab_chat, tab_export = st.tabs(["Report", "Diet Plan", "Doc Talk", "Export"])
                     
                     with tab_sum:
                         st.markdown(st.session_state.current_report)
                         st.markdown("---")
-                        st.caption("🎧 Listen to Summary")
+                        st.caption("Audio Summary")
                         audio_file = text_to_speech(st.session_state.current_report, lang_code=lang_code[:2]) 
                         if audio_file:
                             st.audio(audio_file, format='audio/mp3')
@@ -419,18 +410,66 @@ elif st.session_state.page == "Trends":
         else:
             st.warning("No numerical data found yet. Go to Home > Upload > Click 'Add to Trends'.")
 
-# ================= PAGE 3: FILES =================
+# ================= PAGE 3: FILES (REMASTERED) =================
 elif st.session_state.page == "Files":
     st.markdown("### Secure Archive")
+    
     if not st.session_state.vault:
         st.info("No records found.")
     else:
-        for f in st.session_state.vault:
+        # Loop with index to create unique keys for widgets
+        for i, f in enumerate(st.session_state.vault):
+            # Clean Expander Title (No emojis)
             with st.expander(f"{f['name']}   |   {f['timestamp']}"):
-                col_a, col_b = st.columns([1, 3])
-                with col_a:
-                    st.caption("TYPE")
-                    st.write(f['type'])
-                with col_b:
-                    st.caption("SUMMARY")
+                
+                # --- TOP ROW: ACTIONS ---
+                c1, c2, c3 = st.columns([3, 1, 1])
+                
+                # 1. RENAME
+                with c1:
+                    new_name = st.text_input("Rename File", f['name'], key=f"rename_{i}")
+                    if new_name != f['name']:
+                        f['name'] = new_name
+                        st.success("Renamed")
+                        st.rerun()
+
+                # 2. DOWNLOAD
+                with c2:
+                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True) # Spacer
+                    
+                    # Prepare Download Data
+                    data_to_download = f['content']
+                    file_ext = "txt"
+                    mime_type = "text/plain"
+                    
+                    # If it's an image, convert to bytes
+                    if f['type'] == "Image":
+                        img_byte_arr = io.BytesIO()
+                        # Verify it's a valid PIL image
+                        if isinstance(f['content'], Image.Image):
+                            f['content'].save(img_byte_arr, format='PNG')
+                            data_to_download = img_byte_arr.getvalue()
+                            file_ext = "png"
+                            mime_type = "image/png"
+                    
+                    st.download_button(
+                        label="Download",
+                        data=data_to_download,
+                        file_name=f"medilink_file_{i}.{file_ext}",
+                        mime=mime_type,
+                        key=f"dl_{i}",
+                        use_container_width=True
+                    )
+                
+                # --- PREVIEW SECTION ---
+                st.markdown("---")
+                st.markdown("#### Preview Content")
+                
+                if f['type'] == "Image":
+                    st.image(f['content'], use_container_width=True)
+                else:
+                    st.text_area("File Content", f['content'], height=200, key=f"prev_{i}")
+                
+                if f['summary'] != "Pending":
+                    st.markdown("#### Clinical Summary")
                     st.write(f['summary'])
