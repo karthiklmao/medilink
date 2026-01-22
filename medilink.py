@@ -24,23 +24,19 @@ st.markdown("""
         color: #27231E; /* Eerie Black */
     }
     
-    /* BACKGROUND OVERRIDE */
     .stApp {
         background-color: #FFF5F5; /* Snow */
     }
 
-    /* HIDE DEFAULT ELEMENTS */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
-    /* SIDEBAR STYLING */
     section[data-testid="stSidebar"] {
         background-color: #FFFFFF;
         border-right: 1px solid #EAEAEA;
     }
     
-    /* CARDS (White floating boxes) */
     div.stExpander, div[data-testid="stFileUploader"], div.stDataFrame {
         background: #FFFFFF;
         border-radius: 12px;
@@ -49,10 +45,10 @@ st.markdown("""
         box-shadow: 0px 4px 20px rgba(39, 35, 30, 0.03);
     }
     
-    /* NAVIGATION BUTTONS (Dark Slate Gray) */
+    /* --- FIX: FORCE WHITE TEXT ON SIDEBAR BUTTONS --- */
     div.stButton > button {
-        background-color: #3A5253;
-        color: white;
+        background-color: #3A5253; /* Dark Slate Gray */
+        color: #FFFFFF !important; /* Force White Text */
         border-radius: 8px;
         border: none;
         height: 3rem;
@@ -61,12 +57,17 @@ st.markdown("""
         width: 100%;
     }
     div.stButton > button:hover {
-        background-color: #27231E; /* Eerie Black on hover */
+        background-color: #27231E; 
+        color: #FFFFFF !important;
         box-shadow: 0 4px 12px rgba(58, 82, 83, 0.2);
     }
+    
+    /* --- FIX: MAKE TEXT ON HOVER WHITE TOO --- */
+    div.stButton > button:focus:not(:active) {
+        color: #FFFFFF !important;
+    }
 
-    /* ACTION BUTTON (Burnt Sienna - The 'Pop' Color) */
-    /* We target the specific 'primary' button type for the main action */
+    /* ACTION BUTTON (Burnt Sienna) */
     button[kind="primary"] {
         background-color: #E07A5F !important;
         color: white !important;
@@ -77,7 +78,6 @@ st.markdown("""
         background-color: #C85D40 !important;
     }
 
-    /* SIDEBAR CARD (Eerie Black Gradient) */
     .premium-card {
         background: linear-gradient(135deg, #3A5253 0%, #27231E 100%);
         border-radius: 16px;
@@ -95,16 +95,14 @@ st.markdown("""
         font-weight: 600;
     }
     .premium-card p {
-        color: #81B29A; /* Cambridge Blue Text */
+        color: #81B29A;
         font-size: 13px;
         margin: 0 0 15px 0;
     }
     
-    /* TYPOGRAPHY COLORS */
     h1, h2, h3 { color: #27231E; }
     p, li { color: #3A5253; }
     
-    /* INPUT FIELDS */
     .stTextInput input {
         border: 1px solid #81B29A;
         border-radius: 8px;
@@ -121,7 +119,6 @@ with st.sidebar:
     st.markdown("### MEDILINK")
     st.markdown("<div style='height: 20px'></div>", unsafe_allow_html=True)
     
-    # Clean Navigation (No Emojis)
     if st.button("Home"):
         st.session_state.page = "Home"
         
@@ -130,7 +127,6 @@ with st.sidebar:
         
     st.markdown("<div style='height: 50px'></div>", unsafe_allow_html=True)
     
-    # Premium Status Card (Matching Palette)
     st.markdown("""
     <div class="premium-card">
         <h3>Pro Account</h3>
@@ -164,13 +160,14 @@ def save_to_vault(name, type, content, summary="Pending"):
 
 # --- PAGE LOGIC ---
 
-# HEADER
+# HEADER & SEARCH
 col_title, col_search = st.columns([4, 1])
 with col_title:
     st.markdown(f"## {st.session_state.page}")
-    
+
 with col_search:
-    st.text_input("Search", placeholder="Type to search...", label_visibility="collapsed")
+    # Capturing the search query
+    search_query = st.text_input("Search", placeholder="Type to search...", label_visibility="collapsed")
 
 st.markdown("<div style='height: 20px'></div>", unsafe_allow_html=True)
 
@@ -217,7 +214,6 @@ if st.session_state.page == "Home":
         with col2:
             st.markdown("##### Intelligence Console")
             with st.container():
-                # NOTE: type="primary" triggers the Burnt Sienna color defined in CSS
                 if uploaded_file and st.button("Run Diagnostics", type="primary"):
                     client = genai.Client(api_key=api_key)
                     with st.spinner("Processing..."):
@@ -246,7 +242,6 @@ if st.session_state.page == "Home":
                                 st.markdown("##### Trends")
                                 df = pd.DataFrame(data)
                                 df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
-                                # Using Cambridge Blue for the Chart
                                 st.bar_chart(df.set_index("Test")['Value'], color="#81B29A")
                                 
                         except Exception as e:
@@ -254,17 +249,23 @@ if st.session_state.page == "Home":
                 elif not uploaded_file:
                     st.info("Awaiting file upload...")
 
-# PAGE 2: FILES
+# PAGE 2: FILES (SEARCH ENABLED)
 elif st.session_state.page == "Files":
     if not st.session_state.vault:
-        st.warning("No files uploaded yet.")
+        st.info("No records found.")
     else:
-        for f in st.session_state.vault:
-            with st.expander(f['name']):
-                st.markdown("##### Summary")
-                st.markdown(f['summary'])
-                if 'data' in f:
-                    st.markdown("##### Trends")
-                    df = pd.DataFrame(f['data'])
-                    df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
-                    st.bar_chart(df.set_index("Test")['Value'], color="#81B29A")
+        # Filter files based on search query
+        files_to_show = [f for f in st.session_state.vault if search_query.lower() in f['name'].lower()]
+        
+        if not files_to_show:
+            st.warning(f"No files found matching '{search_query}'")
+        else:
+            for f in files_to_show:
+                with st.expander(f"{f['name']}   |   {f['timestamp']}"):
+                    col_a, col_b = st.columns([1, 3])
+                    with col_a:
+                        st.caption("TYPE")
+                        st.write(f['type'])
+                    with col_b:
+                        st.caption("SUMMARY")
+                        st.write(f['summary'])
