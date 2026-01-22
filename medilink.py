@@ -45,10 +45,11 @@ st.markdown("""
         box-shadow: 0px 4px 20px rgba(39, 35, 30, 0.03);
     }
     
-    /* --- FIX: FORCE WHITE TEXT ON SIDEBAR BUTTONS --- */
+    /* --- FIXED BUTTON STYLING --- */
+    /* Target all buttons to have white text */
     div.stButton > button {
-        background-color: #3A5253; /* Dark Slate Gray */
-        color: #FFFFFF !important; /* Force White Text */
+        background-color: #3A5253 !important; /* Dark Slate Gray */
+        color: #FFFFFF !important; /* PURE WHITE TEXT */
         border-radius: 8px;
         border: none;
         height: 3rem;
@@ -56,18 +57,26 @@ st.markdown("""
         transition: all 0.3s ease;
         width: 100%;
     }
+    
+    /* Ensure text stays white on hover */
     div.stButton > button:hover {
-        background-color: #27231E; 
+        background-color: #27231E !important; 
         color: #FFFFFF !important;
         box-shadow: 0 4px 12px rgba(58, 82, 83, 0.2);
     }
     
-    /* --- FIX: MAKE TEXT ON HOVER WHITE TOO --- */
+    /* Ensure text stays white when clicked/focused */
     div.stButton > button:focus:not(:active) {
         color: #FFFFFF !important;
+        background-color: #3A5253 !important;
+    }
+    
+    /* Target the paragraph tag inside the button specifically (Streamlit quirk) */
+    div.stButton > button p {
+        color: #FFFFFF !important; 
     }
 
-    /* ACTION BUTTON (Burnt Sienna) */
+    /* ACTION BUTTON (Burnt Sienna - Different Color) */
     button[kind="primary"] {
         background-color: #E07A5F !important;
         color: white !important;
@@ -119,6 +128,7 @@ with st.sidebar:
     st.markdown("### MEDILINK")
     st.markdown("<div style='height: 20px'></div>", unsafe_allow_html=True)
     
+    # Navigation Buttons (White Text Fixed)
     if st.button("Home"):
         st.session_state.page = "Home"
         
@@ -127,6 +137,7 @@ with st.sidebar:
         
     st.markdown("<div style='height: 50px'></div>", unsafe_allow_html=True)
     
+    # Sidebar Card
     st.markdown("""
     <div class="premium-card">
         <h3>Pro Account</h3>
@@ -160,15 +171,8 @@ def save_to_vault(name, type, content, summary="Pending"):
 
 # --- PAGE LOGIC ---
 
-# HEADER & SEARCH
-col_title, col_search = st.columns([4, 1])
-with col_title:
-    st.markdown(f"## {st.session_state.page}")
-
-with col_search:
-    # Capturing the search query
-    search_query = st.text_input("Search", placeholder="Type to search...", label_visibility="collapsed")
-
+# HEADER (No Search Bar)
+st.markdown(f"## {st.session_state.page}")
 st.markdown("<div style='height: 20px'></div>", unsafe_allow_html=True)
 
 # PAGE 1: HOME
@@ -249,23 +253,17 @@ if st.session_state.page == "Home":
                 elif not uploaded_file:
                     st.info("Awaiting file upload...")
 
-# PAGE 2: FILES (SEARCH ENABLED)
+# PAGE 2: FILES (Vault)
 elif st.session_state.page == "Files":
     if not st.session_state.vault:
         st.info("No records found.")
     else:
-        # Filter files based on search query
-        files_to_show = [f for f in st.session_state.vault if search_query.lower() in f['name'].lower()]
-        
-        if not files_to_show:
-            st.warning(f"No files found matching '{search_query}'")
-        else:
-            for f in files_to_show:
-                with st.expander(f"{f['name']}   |   {f['timestamp']}"):
-                    col_a, col_b = st.columns([1, 3])
-                    with col_a:
-                        st.caption("TYPE")
-                        st.write(f['type'])
-                    with col_b:
-                        st.caption("SUMMARY")
-                        st.write(f['summary'])
+        for f in st.session_state.vault:
+            with st.expander(f"{f['name']}   |   {f['timestamp']}"):
+                col_a, col_b = st.columns([1, 3])
+                with col_a:
+                    st.caption("TYPE")
+                    st.write(f['type'])
+                with col_b:
+                    st.caption("SUMMARY")
+                    st.write(f['summary'])
