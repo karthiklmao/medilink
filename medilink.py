@@ -19,7 +19,7 @@ st.set_page_config(
 # --- 2. COASTAL THEME CSS ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'DM Sans', sans-serif;
@@ -30,14 +30,13 @@ st.markdown("""
         background-color: #ECF8FD; /* Light Blue Background */
     }
 
-    /* --- NAVIGATION & CONTAINERS --- */
+    /* --- NAVIGATION CONTAINER (Transparent/Invisible) --- */
     div[data-testid="stVerticalBlock"] > div:has(div.nav-button) {
-        background-color: #AFCBD5; /* Soft Blue-Grey Card */
-        padding: 1rem;
-        border-radius: 12px;
-        box-shadow: 0 4px 20px rgba(39, 40, 56, 0.05);
+        background-color: transparent; /* Make the box invisible */
+        padding: 0rem;
+        border: none;
+        box-shadow: none;
         margin-bottom: 2rem;
-        border: 1px solid #9FB7C1;
     }
 
     /* CARDS & INPUTS */
@@ -49,41 +48,52 @@ st.markdown("""
         box-shadow: 0px 4px 20px rgba(39, 40, 56, 0.03);
     }
     
-    /* --- STANDARD NAVIGATION BUTTONS --- */
+    /* --- TRANSPARENT NAVIGATION BUTTONS --- */
     div.stButton > button {
-        background-color: #272838 !important; /* Dark Blue-Black */
-        color: #FFFFFF !important;
-        border-radius: 8px;
+        background-color: transparent !important; /* INVISIBLE BOX */
+        color: #272838 !important; /* TEXT COLOR = THEME DARK */
         border: none;
         height: 2.5rem;
-        font-weight: 500;
+        font-weight: 700; /* Bold text to make it stand out */
+        font-size: 18px !important;
         transition: all 0.3s ease;
         width: 100%;
+        text-align: center;
     }
+    
+    /* Hover Effect: Subtle Grey Background */
     div.stButton > button:hover {
-        background-color: #1B1C26 !important; /* Slightly Darker on Hover */
-        box-shadow: 0 4px 12px rgba(39, 40, 56, 0.3);
+        background-color: rgba(39, 40, 56, 0.1) !important; 
+        color: #272838 !important;
+        border-radius: 8px;
     }
-    div.stButton > button p { color: #FFFFFF !important; }
+    
+    /* Fix for paragraph text inside buttons */
+    div.stButton > button p { color: #272838 !important; }
 
-    /* --- PRIMARY ACTION BUTTON (Muted Mauve) --- */
+    /* --- PRIMARY ACTION BUTTON (Muted Mauve - Kept Solid) --- */
     button[kind="primary"] {
         background-color: #815355 !important;
+        color: white !important; /* Keep white text for main button */
         height: 3rem !important;
         font-weight: 700 !important;
+        border-radius: 8px;
     }
+    button[kind="primary"] p { color: white !important; } /* Force white text */
+    
     button[kind="primary"]:hover {
         background-color: #6B4446 !important;
         box-shadow: 0 4px 14px rgba(129, 83, 85, 0.4) !important;
     }
     
-    /* LOGO TEXT - ENLARGED */
+    /* LOGO TEXT - ENLARGED TO 45px */
     .logo-text {
         font-weight: 800;
-        font-size: 30px; /* Increased from 24px */
+        font-size: 45px; /* REQUESTED SIZE */
         color: #272838;
-        letter-spacing: -0.5px;
-        padding-top: 2px;
+        letter-spacing: -1px;
+        line-height: 1.0;
+        padding-top: 5px;
     }
     
     /* STATUS BADGE */
@@ -111,12 +121,14 @@ if "chat_history" not in st.session_state: st.session_state.chat_history = []
 
 # --- 4. TOP NAVIGATION BAR ---
 with st.container():
-    col_logo, col_nav_space, col_nav_buttons, col_end_space, col_status = st.columns([2, 1, 6, 1, 2])
+    col_logo, col_nav_space, col_nav_buttons, col_end_space, col_status = st.columns([3, 0.5, 5, 0.5, 2])
     
     with col_logo:
         st.markdown('<p class="logo-text">MEDILINK</p>', unsafe_allow_html=True)
         
     with col_nav_buttons:
+        # Align buttons to the bottom of the container to match logo baseline
+        st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True)
         nav_1, nav_2, nav_3 = st.columns(3)
         with nav_1:
             if st.button("Home", use_container_width=True): st.session_state.page = "Home"
@@ -126,6 +138,7 @@ with st.container():
             if st.button("Files", use_container_width=True): st.session_state.page = "Files"
                 
     with col_status:
+        st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True)
         st.markdown('<div class="status-badge">● Secure Connection</div>', unsafe_allow_html=True)
 
 st.markdown("---")
@@ -256,7 +269,6 @@ if st.session_state.page == "Home":
                         if "current_data" in st.session_state and st.session_state.current_data:
                             df = pd.DataFrame(st.session_state.current_data)
                             df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
-                            # Chart color updated to new primary accent
                             st.bar_chart(df.set_index("Test")['Value'], color="#815355")
 
                     with tab_chat:
@@ -308,7 +320,6 @@ elif st.session_state.page == "Trends":
             selected_test = st.selectbox("Select Vital Sign to Track", tests)
             
             chart_data = df_trends[df_trends['Test'] == selected_test]
-            # Chart color updated to new primary accent
             st.line_chart(chart_data.set_index("Date")['Value'], color="#815355")
             
             st.markdown(f"""
