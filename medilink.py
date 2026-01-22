@@ -207,10 +207,20 @@ if st.session_state.page == "Home":
     st.markdown("### Home")
     st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
 
-    if "GEMINI_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_KEY"]
-    else:
+    # --- CRASH FIX: SECURE API KEY CHECK ---
+    api_key = None
+    try:
+        # Attempt to access secrets, but catch error if file missing
+        if "GEMINI_KEY" in st.secrets:
+            api_key = st.secrets["GEMINI_KEY"]
+    except:
+        # If no secrets file, pass (don't crash)
+        pass
+
+    # If key wasn't found in secrets, show input box
+    if not api_key:
         api_key = st.text_input("License Key", type="password")
+    # --- END CRASH FIX ---
 
     if api_key:
         col1, col2 = st.columns([1, 2], gap="large")
@@ -377,7 +387,7 @@ elif st.session_state.page == "Trends":
         else:
             st.warning("No numerical data found yet. Go to Home > Upload > Click 'Add to Trends'.")
 
-# ================= PAGE 3: FILES (FIXED) =================
+# ================= PAGE 3: FILES (CRASH FIXED) =================
 elif st.session_state.page == "Files":
     st.markdown("### Secure Archive")
     if not st.session_state.vault:
@@ -395,14 +405,12 @@ elif st.session_state.page == "Files":
                 with c2:
                     st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
                     
-                    # --- CRASH FIX START ---
-                    # 1. Initialize variables safely
+                    # SAFE DOWNLOAD LOGIC
                     data_to_download = None
                     file_ext = "txt"
                     mime_type = "text/plain"
 
                     try:
-                        # 2. Check if content exists and what type it is
                         if f.get('content') is not None:
                             if isinstance(f['content'], Image.Image):
                                 img_byte_arr = io.BytesIO()
@@ -419,7 +427,6 @@ elif st.session_state.page == "Files":
                     except Exception as e:
                         st.error(f"Error preparing download: {e}")
 
-                    # 3. Only show button if data is valid
                     if data_to_download:
                         st.download_button(
                             label="Download", 
@@ -431,7 +438,6 @@ elif st.session_state.page == "Files":
                         )
                     else:
                         st.warning("Download unavailable")
-                    # --- CRASH FIX END ---
 
                 st.markdown("---")
                 if isinstance(f['content'], Image.Image):
