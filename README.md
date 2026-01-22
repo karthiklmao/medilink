@@ -18,7 +18,7 @@ MediLink is a secure, cloud-based accessible interface that:
 * **Deployment:** Streamlit Community Cloud
 
 ## 📸 Screenshots
-*<img width="1464" height="796" alt="image" src="https://github.com/user-attachments/assets/8cb7c35f-0cb9-4089-b1a4-422539c10289" />*
+*<img width="<img width="1467" height="803" alt="image" src="https://github.com/user-attachments/assets/57d9a0c5-a896-436b-a4ef-9478bc4855f8" />" />*
 
 ## ⚖️ Privacy Note
 This project is a prototype. No data is permanently stored; files are processed in-memory for privacy.
