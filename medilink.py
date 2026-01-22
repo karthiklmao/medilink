@@ -5,78 +5,69 @@ from PIL import Image
 import pandas as pd
 import json
 import time
-import io
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="MediLink AI",
-    page_icon="🧬",
+    page_title="MediLink 365",
+    page_icon="🩺",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# --- 2. THE "PROXIMA" UI INJECTION (CSS) ---
+# --- 2. MICROSOFT STYLE CSS ---
 st.markdown("""
     <style>
-    /* IMPORT MODERN FONT */
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+    /* IMPORT MODERN FONT (Segoe UI equivalent) */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
     
     html, body, [class*="css"]  {
-        font-family: 'Poppins', sans-serif;
+        font-family: 'Inter', sans-serif;
     }
 
-    /* NEON GRADIENT BUTTONS */
+    /* REMOVE DEFAULT STREAMLIT PADDING */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+
+    /* TOP NAVIGATION BAR */
+    .nav-container {
+        background-color: #f0f2f5;
+        padding: 10px 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        border-bottom: 2px solid #0078d4; /* Microsoft Blue */
+    }
+
+    /* BUTTONS (Microsoft Blue Style) */
     div.stButton > button:first-child {
-        background: linear-gradient(90deg, #8A2BE2 0%, #FF0080 100%);
+        background-color: #0078d4;
         color: white;
         border: none;
-        border-radius: 50px;
-        padding: 0.5rem 1rem;
+        border-radius: 4px;
         font-weight: 600;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(255, 0, 128, 0.4);
+        transition: all 0.2s;
     }
     div.stButton > button:first-child:hover {
-        transform: scale(1.02);
-        box-shadow: 0 6px 20px rgba(255, 0, 128, 0.6);
-        color: white;
-    }
-
-    /* GLASSMORPHISM CARDS */
-    .stExpander, .stTextInput, .stFileUploader {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
+        background-color: #106ebe;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     
-    /* SIDEBAR STYLING */
-    section[data-testid="stSidebar"] {
-        background-color: #0a0a14;
-        border-right: 1px solid #2a2a35;
+    /* CARDS */
+    .stExpander, .stTextInput, div[data-testid="stFileUploader"] {
+        background-color: #ffffff;
+        border: 1px solid #e1dfdd;
+        border-radius: 8px;
+        padding: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
-
-    /* CUSTOM TITLES WITH GRADIENT TEXT */
+    
+    /* HEADERS */
     h1, h2, h3 {
-        background: -webkit-linear-gradient(45deg, #00d2ff, #3a7bd5);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-    
-    /* CUSTOM TABS */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-        background-color: transparent;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: rgba(255,255,255,0.05);
-        border-radius: 20px;
-        color: white;
-        border: none;
-    }
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(90deg, #8A2BE2 0%, #FF0080 100%);
-        color: white;
+        color: #201f1e;
+        font-weight: 600;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -84,25 +75,33 @@ st.markdown("""
 # --- 3. SESSION STATE ---
 if "vault" not in st.session_state:
     st.session_state.vault = []
+if "page" not in st.session_state:
+    st.session_state.page = "Home"
 
-# --- 4. SIDEBAR ---
-with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3063/3063176.png", width=60)
-    st.title("MediLink Portal")
-    st.caption("v4.0 | Neon Edition")
-    st.markdown("---")
-    
-    uploaded_file = st.file_uploader("📂 Upload Medical Record", type=['pdf', 'jpg', 'png', 'txt'])
-    
+# --- 4. TOP NAVIGATION BAR (The "Microsoft" Ribbon) ---
+# We use columns to create a horizontal header
+col_logo, col_nav1, col_nav2, col_auth = st.columns([1, 1, 1, 2])
+
+with col_logo:
+    st.markdown("### 🩺 MediLink 365")
+
+with col_nav1:
+    if st.button("🏠 Home", use_container_width=True):
+        st.session_state.page = "Home"
+
+with col_nav2:
+    if st.button("🗄️ Vault", use_container_width=True):
+        st.session_state.page = "Vault"
+
+with col_auth:
+    # KEY HANDLING IN HEADER
     if "GEMINI_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_KEY"]
-        st.success("🟢 System Online")
+        st.success("🔒 Enterprise Access Active")
     else:
-        api_key = st.text_input("Access Key", type="password")
+        api_key = st.text_input("Enter API Key", type="password", label_visibility="collapsed", placeholder="Enter API Key")
 
-    # Vault Stats (Styled)
-    st.markdown("---")
-    st.markdown(f"**🗄️ Vault Status:** `{len(st.session_state.vault)}` Files")
+st.markdown("---") # Divider line below header
 
 # --- HELPER FUNCTIONS ---
 def get_gemini_response(client, content, prompt):
@@ -116,11 +115,11 @@ def get_gemini_response(client, content, prompt):
         except Exception as e:
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                 wait_time = (attempt + 1) * 5
-                st.warning(f"⚠️ High traffic. Retrying in {wait_time}s...")
+                st.warning(f"⚠️ Server Busy. Retrying in {wait_time}s...")
                 time.sleep(wait_time)
             else:
                 raise e
-    raise Exception("Server busy. Please try again.")
+    raise Exception("Service unavailable. Try again later.")
 
 def save_to_vault(filename, file_type, content, summary="Not Analyzed"):
     for f in st.session_state.vault:
@@ -130,15 +129,22 @@ def save_to_vault(filename, file_type, content, summary="Not Analyzed"):
         "summary": summary, "timestamp": time.strftime("%H:%M")
     })
 
-# --- MAIN LAYOUT ---
-tab1, tab2 = st.tabs(["⚡ Analysis Console", "🗃️ Secure Vault"])
+# --- PAGE ROUTING LOGIC ---
 
-# ================= TAB 1: CONSOLE =================
-with tab1:
+# ==========================================
+# PAGE 1: HOME (Dashboard)
+# ==========================================
+if st.session_state.page == "Home":
+    st.subheader("Dashboard")
+    
+    # 1. FILE UPLOAD SECTION (Top Card)
+    with st.container():
+        uploaded_file = st.file_uploader("Upload Document to Cloud", type=['pdf', 'jpg', 'png', 'txt'])
+
     if uploaded_file and api_key:
         col1, col2 = st.columns([1, 1.5], gap="large")
 
-        # --- PROCESS FILE ---
+        # --- PREPARE DATA ---
         file_type = uploaded_file.type
         evidence_for_ai = None
         
@@ -160,30 +166,27 @@ with tab1:
             evidence_for_ai = uploaded_file.read().decode("utf-8")
             save_to_vault(uploaded_file.name, "Text", evidence_for_ai)
 
-        # --- LEFT: PREVIEW ---
+        # --- LEFT: PREVIEWER ---
         with col1:
-            st.subheader("SCAN PREVIEW")
-            container = st.container(border=True)
-            with container:
-                if "image" in file_type:
-                    st.image(evidence_for_ai, use_container_width=True)
-                else:
-                    st.code(str(evidence_for_ai)[:500] + "...", language="text")
+            st.markdown("**Document Preview**")
+            if "image" in file_type:
+                st.image(evidence_for_ai, use_container_width=True)
+            else:
+                st.text_area("Content", str(evidence_for_ai)[:800], height=300)
 
-        # --- RIGHT: INTELLIGENCE ---
+        # --- RIGHT: AI ANALYSIS ---
         with col2:
-            st.subheader("AI DIAGNOSTICS")
+            st.markdown("**AI Insights**")
             
-            # The "Proxima" style button
-            if st.button("RUN ANALYSIS 🚀", type="primary"):
+            if st.button("Generate Report", type="primary"):
                 client = genai.Client(api_key=api_key)
                 
-                with st.spinner("Decoding medical data..."):
+                with st.spinner("Analyzing data..."):
                     try:
                         prompt = """
-                        Analyze this medical document.
-                        TASK 1: SUMMARY (Plain English, bullet points).
-                        TASK 2: JSON DATA of vitals at the very end. Format: [{"Test": "Name", "Value": 10, "Unit": "mg"}]
+                        Analyze this document.
+                        TASK 1: SUMMARY (Plain English).
+                        TASK 2: JSON DATA of vitals at end. Format: [{"Test": "Name", "Value": 10, "Unit": "mg"}]
                         """
                         response = get_gemini_response(client, evidence_for_ai, prompt)
                         
@@ -203,39 +206,34 @@ with tab1:
                         for f in st.session_state.vault:
                             if f['name'] == uploaded_file.name: f['summary'] = summary
                         
-                        # Display Results
-                        st.markdown("### 🧬 Clinical Findings")
+                        st.success("Analysis Complete")
                         st.markdown(summary)
                         
                         if data_json:
-                            st.markdown("### 📊 Biometrics")
+                            st.divider()
+                            st.markdown("**Vitals Trend**")
                             df = pd.DataFrame(data_json)
                             df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
-                            st.bar_chart(df.set_index("Test")['Value'], color="#8A2BE2") # Purple Chart
+                            st.bar_chart(df.set_index("Test")['Value'])
                             
                     except Exception as e:
                         st.error(f"Error: {e}")
 
     elif not uploaded_file:
-        # LANDING PAGE - HERO SECTION
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        col_main, _ = st.columns([2, 1])
-        with col_main:
-            st.title("Revolutionizing Health Data.")
-            st.markdown("""
-            <h3 style='color: #a0a0a0; font-weight: 300;'>
-            Your personal medical intelligence hub. Secure. Fast. Powered by Gemini 2.0.
-            </h3>
-            """, unsafe_allow_html=True)
-            st.info("👈 Upload a file to begin the sequence.")
+        # Empty State
+        st.info("👋 Welcome. Please upload a medical record to begin analysis.")
 
-# ================= TAB 2: VAULT =================
-with tab2:
-    st.subheader("ENCRYPTED ARCHIVE")
+# ==========================================
+# PAGE 2: VAULT (Storage)
+# ==========================================
+elif st.session_state.page == "Vault":
+    st.subheader("🗄️ Secure Document Vault")
+    
     if not st.session_state.vault:
-        st.caption("No records found in current session.")
+        st.warning("Vault is empty. Go to Home to upload files.")
     else:
+        # Display as a table/list
         for f in st.session_state.vault:
-            with st.expander(f"📄 {f['name']} | {f['timestamp']}"):
-                st.markdown(f"**Type:** {f['type']}")
-                st.info(f"Summary: {f['summary'][:200]}...")
+            with st.expander(f"{f['type']} - {f['name']} ({f['timestamp']})"):
+                st.markdown(f"**AI Summary:**")
+                st.write(f['summary'])
