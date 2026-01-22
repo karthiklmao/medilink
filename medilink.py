@@ -31,7 +31,6 @@ st.markdown("""
         background-color: #ECF8FD;
     }
 
-    /* NAVIGATION CONTAINER */
     div[data-testid="stVerticalBlock"] > div:has(div.nav-button) {
         background-color: transparent;
         padding: 0rem;
@@ -40,7 +39,6 @@ st.markdown("""
         margin-bottom: 2rem;
     }
 
-    /* CARDS & INPUTS */
     div.stExpander, div[data-testid="stFileUploader"], div.stDataFrame, div[data-testid="stChatInput"] {
         background: #AFCBD5;
         border-radius: 12px;
@@ -49,7 +47,6 @@ st.markdown("""
         box-shadow: 0px 4px 20px rgba(39, 40, 56, 0.03);
     }
     
-    /* NAVIGATION BUTTONS */
     div.stButton > button {
         background-color: transparent !important;
         color: #272838 !important;
@@ -70,7 +67,6 @@ st.markdown("""
     
     div.stButton > button p { color: #272838 !important; }
 
-    /* PRIMARY ACTION BUTTON */
     button[kind="primary"] {
         background-color: #815355 !important;
         color: white !important;
@@ -85,7 +81,6 @@ st.markdown("""
         box-shadow: 0 4px 14px rgba(129, 83, 85, 0.4) !important;
     }
     
-    /* SECONDARY ACTION BUTTONS */
     button[kind="secondary"] {
         background-color: #FFFFFF !important;
         color: #272838 !important;
@@ -97,7 +92,6 @@ st.markdown("""
         background-color: #F0F4F8 !important;
     }
     
-    /* STATUS BADGE */
     .status-badge {
         background-color: #D0E3ED;
         color: #272838;
@@ -232,23 +226,28 @@ if st.session_state.page == "Home":
                 st.markdown("##### Preview")
                 file_type = uploaded_file.type
                 evidence = None
+                type_label = "File"
                 
                 if "pdf" in file_type:
                     uploaded_file.seek(0)
                     reader = PyPDF2.PdfReader(uploaded_file)
                     text = "".join([p.extract_text() for p in reader.pages])
                     evidence = text
+                    type_label = "PDF"
                     st.info(f"{len(reader.pages)} Pages Processed")
                 elif "image" in file_type:
                     uploaded_file.seek(0)
                     evidence = Image.open(uploaded_file)
+                    type_label = "Image"
                     st.image(evidence, use_container_width=True)
                 elif "text" in file_type:
                     uploaded_file.seek(0)
                     evidence = uploaded_file.read().decode("utf-8")
+                    type_label = "Text"
                     st.text_area("Content", evidence[:200], height=150)
 
-                save_to_vault(uploaded_file.name, "File", evidence)
+                # Save with specific type
+                save_to_vault(uploaded_file.name, type_label, evidence)
 
         with col2:
             st.markdown("##### Intelligence Console")
@@ -282,7 +281,7 @@ if st.session_state.page == "Home":
                                 j_end = txt.rfind("]") + 1
                                 if j_start != -1 and j_end != -1:
                                     data_json = json.loads(txt[j_start:j_end])
-                                    save_to_vault(uploaded_file.name, "File", evidence, data=data_json)
+                                    save_to_vault(uploaded_file.name, type_label, evidence, data=data_json)
                                 
                                 st.session_state.page = "Trends"
                                 st.rerun()
@@ -317,7 +316,7 @@ if st.session_state.page == "Home":
                             st.session_state.current_data = data_json
                             st.session_state.current_diet = ""
                             
-                            save_to_vault(uploaded_file.name, "File", evidence, summary=summary_text, data=data_json)
+                            save_to_vault(uploaded_file.name, type_label, evidence, summary=summary_text, data=data_json)
                             
                         except Exception as e:
                             st.error(f"Error: {e}")
@@ -410,22 +409,18 @@ elif st.session_state.page == "Trends":
         else:
             st.warning("No numerical data found yet. Go to Home > Upload > Click 'Add to Trends'.")
 
-# ================= PAGE 3: FILES (REMASTERED) =================
+# ================= PAGE 3: FILES (FIXED) =================
 elif st.session_state.page == "Files":
     st.markdown("### Secure Archive")
     
     if not st.session_state.vault:
         st.info("No records found.")
     else:
-        # Loop with index to create unique keys for widgets
         for i, f in enumerate(st.session_state.vault):
-            # Clean Expander Title (No emojis)
             with st.expander(f"{f['name']}   |   {f['timestamp']}"):
                 
-                # --- TOP ROW: ACTIONS ---
                 c1, c2, c3 = st.columns([3, 1, 1])
                 
-                # 1. RENAME
                 with c1:
                     new_name = st.text_input("Rename File", f['name'], key=f"rename_{i}")
                     if new_name != f['name']:
@@ -433,24 +428,22 @@ elif st.session_state.page == "Files":
                         st.success("Renamed")
                         st.rerun()
 
-                # 2. DOWNLOAD
                 with c2:
-                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True) # Spacer
+                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
                     
-                    # Prepare Download Data
+                    # SAFE DOWNLOAD LOGIC
                     data_to_download = f['content']
                     file_ext = "txt"
                     mime_type = "text/plain"
                     
-                    # If it's an image, convert to bytes
-                    if f['type'] == "Image":
+                    if isinstance(f['content'], Image.Image):
                         img_byte_arr = io.BytesIO()
-                        # Verify it's a valid PIL image
-                        if isinstance(f['content'], Image.Image):
-                            f['content'].save(img_byte_arr, format='PNG')
-                            data_to_download = img_byte_arr.getvalue()
-                            file_ext = "png"
-                            mime_type = "image/png"
+                        f['content'].save(img_byte_arr, format='PNG')
+                        data_to_download = img_byte_arr.getvalue()
+                        file_ext = "png"
+                        mime_type = "image/png"
+                    elif isinstance(f['content'], str):
+                         data_to_download = f['content'].encode("utf-8")
                     
                     st.download_button(
                         label="Download",
@@ -461,15 +454,21 @@ elif st.session_state.page == "Files":
                         use_container_width=True
                     )
                 
-                # --- PREVIEW SECTION ---
                 st.markdown("---")
                 st.markdown("#### Preview Content")
                 
-                if f['type'] == "Image":
+                if isinstance(f['content'], Image.Image):
                     st.image(f['content'], use_container_width=True)
                 else:
-                    st.text_area("File Content", f['content'], height=200, key=f"prev_{i}")
+                    st.text_area("File Content", str(f['content']), height=200, key=f"prev_{i}")
                 
                 if f['summary'] != "Pending":
                     st.markdown("#### Clinical Summary")
                     st.write(f['summary'])
+                if f.get('data'):
+                    st.markdown("#### Extracted Data Points")
+                    df = pd.DataFrame(f['data'])
+                    df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
+                    st.dataframe(df)        
+
+# --- END OF FILE ---
