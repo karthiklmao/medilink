@@ -16,39 +16,42 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. BOUTIQUE EARTH THEME CSS ---
+# --- 2. COASTAL THEME CSS ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'DM Sans', sans-serif;
-        color: #27231E;
+        color: #272838; /* Dark Blue-Black Text */
     }
     
     .stApp {
-        background-color: #FFF5F5;
+        background-color: #ECF8FD; /* Light Blue Background */
     }
 
+    /* --- NAVIGATION & CONTAINERS --- */
     div[data-testid="stVerticalBlock"] > div:has(div.nav-button) {
-        background-color: white;
+        background-color: #AFCBD5; /* Soft Blue-Grey Card */
         padding: 1rem;
         border-radius: 12px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+        box-shadow: 0 4px 20px rgba(39, 40, 56, 0.05);
         margin-bottom: 2rem;
+        border: 1px solid #9FB7C1;
     }
 
+    /* CARDS & INPUTS */
     div.stExpander, div[data-testid="stFileUploader"], div.stDataFrame, div[data-testid="stChatInput"] {
-        background: #FFFFFF;
+        background: #AFCBD5; /* Soft Blue-Grey */
         border-radius: 12px;
         padding: 20px;
-        border: 1px solid #F0F0F0;
-        box-shadow: 0px 4px 20px rgba(39, 35, 30, 0.03);
+        border: 1px solid #9FB7C1;
+        box-shadow: 0px 4px 20px rgba(39, 40, 56, 0.03);
     }
     
-    /* BUTTON STYLING */
+    /* --- STANDARD NAVIGATION BUTTONS --- */
     div.stButton > button {
-        background-color: #3A5253 !important; 
+        background-color: #272838 !important; /* Dark Blue-Black */
         color: #FFFFFF !important;
         border-radius: 8px;
         border: none;
@@ -58,41 +61,45 @@ st.markdown("""
         width: 100%;
     }
     div.stButton > button:hover {
-        background-color: #27231E !important; 
-        box-shadow: 0 4px 12px rgba(58, 82, 83, 0.2);
+        background-color: #1B1C26 !important; /* Slightly Darker on Hover */
+        box-shadow: 0 4px 12px rgba(39, 40, 56, 0.3);
     }
     div.stButton > button p { color: #FFFFFF !important; }
 
-    /* PRIMARY ACTION BUTTON */
+    /* --- PRIMARY ACTION BUTTON (Muted Mauve) --- */
     button[kind="primary"] {
-        background-color: #E07A5F !important;
+        background-color: #815355 !important;
         height: 3rem !important;
+        font-weight: 700 !important;
     }
     button[kind="primary"]:hover {
-        background-color: #C85D40 !important;
+        background-color: #6B4446 !important;
+        box-shadow: 0 4px 14px rgba(129, 83, 85, 0.4) !important;
     }
     
+    /* LOGO TEXT - ENLARGED */
     .logo-text {
-        font-weight: 700;
-        font-size: 24px;
-        color: #27231E;
+        font-weight: 800;
+        font-size: 30px; /* Increased from 24px */
+        color: #272838;
         letter-spacing: -0.5px;
-        padding-top: 5px;
+        padding-top: 2px;
     }
     
+    /* STATUS BADGE */
     .status-badge {
-        background-color: #E6F4F1;
-        color: #3A5253;
-        padding: 5px 12px;
+        background-color: #D0E3ED;
+        color: #272838;
+        padding: 6px 14px;
         border-radius: 20px;
         font-size: 12px;
         font-weight: 600;
-        border: 1px solid #81B29A;
+        border: 1px solid #815355;
         text-align: center;
     }
     
-    h1, h2, h3 { color: #27231E; }
-    .stTextInput input { border-radius: 8px; }
+    h1, h2, h3, h4, h5, h6, p, li { color: #272838; }
+    .stTextInput input { border: 1px solid #815355; border-radius: 8px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -144,9 +151,7 @@ def create_pdf(summary, action_plan):
     pdf.ln(20)
     
     pdf.set_font("Arial", '', 12)
-    # Add content (sanitized for latin-1)
     content = f"Clinical Summary:\n\n{summary}\n\nAction Plan:\n\n{action_plan}"
-    # Replace common unicode chars that crash FPDF
     content = content.encode('latin-1', 'replace').decode('latin-1')
     
     pdf.multi_cell(0, 10, content)
@@ -189,7 +194,6 @@ if st.session_state.page == "Home":
                 file_type = uploaded_file.type
                 evidence = None
                 
-                # File Processing
                 if "pdf" in file_type:
                     uploaded_file.seek(0)
                     reader = PyPDF2.PdfReader(uploaded_file)
@@ -205,18 +209,15 @@ if st.session_state.page == "Home":
                     evidence = uploaded_file.read().decode("utf-8")
                     st.text_area("Content", evidence[:200], height=150)
 
-                # Save raw file immediately
                 save_to_vault(uploaded_file.name, "File", evidence)
 
         with col2:
             st.markdown("##### Intelligence Console")
             if uploaded_file:
-                # ANALYSIS BUTTON
                 if st.button("Run Diagnostics", type="primary"):
                     client = genai.Client(api_key=api_key)
                     with st.spinner("Analyzing..."):
                         try:
-                            # ADVANCED PROMPT
                             prompt = """
                             Act as a senior medical analyst. 
                             TASK 1: SUMMARY. Write a clear summary.
@@ -227,7 +228,6 @@ if st.session_state.page == "Home":
                             response = get_gemini_response(client, evidence, prompt)
                             full_text = response.text
                             
-                            # Parse JSON
                             try:
                                 j_start, j_end = full_text.rfind("["), full_text.rfind("]") + 1
                                 data_part = full_text[j_start:j_end]
@@ -237,11 +237,9 @@ if st.session_state.page == "Home":
                                 summary_text = full_text
                                 data_json = []
 
-                            # Update Session State
                             st.session_state.current_report = summary_text
                             st.session_state.current_data = data_json
                             
-                            # Update Vault
                             for f in st.session_state.vault:
                                 if f['name'] == uploaded_file.name:
                                     f['summary'] = summary_text
@@ -250,9 +248,7 @@ if st.session_state.page == "Home":
                         except Exception as e:
                             st.error(f"Error: {e}")
 
-                # DISPLAY RESULTS
                 if st.session_state.current_report:
-                    # TABS for different views
                     tab_sum, tab_chat, tab_export = st.tabs(["📊 Report", "💬 Doc Talk", "📥 Export"])
                     
                     with tab_sum:
@@ -260,11 +256,11 @@ if st.session_state.page == "Home":
                         if "current_data" in st.session_state and st.session_state.current_data:
                             df = pd.DataFrame(st.session_state.current_data)
                             df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
-                            st.bar_chart(df.set_index("Test")['Value'], color="#81B29A")
+                            # Chart color updated to new primary accent
+                            st.bar_chart(df.set_index("Test")['Value'], color="#815355")
 
                     with tab_chat:
                         st.markdown("##### Ask Dr. AI")
-                        # Chat Interface
                         user_query = st.text_input("Ask a question about this report:", placeholder="e.g., Is my iron low?")
                         if user_query:
                             client = genai.Client(api_key=api_key)
@@ -286,7 +282,7 @@ if st.session_state.page == "Home":
             else:
                 st.info("Awaiting file upload...")
 
-# ================= PAGE 2: TRENDS (THE TIME MACHINE) =================
+# ================= PAGE 2: TRENDS =================
 elif st.session_state.page == "Trends":
     st.markdown("### Health Trends")
     st.markdown("Longitudinal analysis of your uploaded records.")
@@ -294,14 +290,12 @@ elif st.session_state.page == "Trends":
     if not st.session_state.vault:
         st.info("Upload multiple reports in 'Home' to see trends here.")
     else:
-        # AGGREGATE DATA
         all_vitals = []
         for f in st.session_state.vault:
             if f.get('data'):
                 for item in f['data']:
-                    # Flatten data: Test Name, Value, Date
                     all_vitals.append({
-                        "Date": f['timestamp'], # Using upload time for demo (ideally extract real date)
+                        "Date": f['timestamp'],
                         "Test": item['Test'],
                         "Value": item['Value']
                     })
@@ -310,17 +304,15 @@ elif st.session_state.page == "Trends":
             df_trends = pd.DataFrame(all_vitals)
             df_trends['Value'] = pd.to_numeric(df_trends['Value'], errors='coerce')
             
-            # Selector
             tests = df_trends['Test'].unique()
             selected_test = st.selectbox("Select Vital Sign to Track", tests)
             
-            # Filter and Plot
             chart_data = df_trends[df_trends['Test'] == selected_test]
-            st.line_chart(chart_data.set_index("Date")['Value'], color="#E07A5F")
+            # Chart color updated to new primary accent
+            st.line_chart(chart_data.set_index("Date")['Value'], color="#815355")
             
-            # Insight Card
             st.markdown(f"""
-            <div style="background-color: white; padding: 20px; border-radius: 10px; border-left: 5px solid #E07A5F;">
+            <div style="background-color: #AFCBD5; padding: 20px; border-radius: 10px; border-left: 5px solid #815355;">
                 <b>Insight:</b> Tracking <b>{selected_test}</b> across {len(chart_data)} data points.
             </div>
             """, unsafe_allow_html=True)
