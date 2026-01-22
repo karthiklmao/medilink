@@ -4,3 +4,4 @@ google-genai
 Pillow
 pandas
 fpdf
+gTTS

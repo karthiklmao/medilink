@@ -7,6 +7,7 @@ import json
 import time
 from fpdf import FPDF
 import io
+from gtts import gTTS
 
 # --- 1. PAGE CONFIG ---
 st.set_page_config(
@@ -23,14 +24,14 @@ st.markdown("""
     
     html, body, [class*="css"] {
         font-family: 'DM Sans', sans-serif;
-        color: #272838; /* Dark Blue-Black Text */
+        color: #272838;
     }
     
     .stApp {
-        background-color: #ECF8FD; /* Light Blue Background */
+        background-color: #ECF8FD;
     }
 
-    /* --- NAVIGATION CONTAINER --- */
+    /* NAVIGATION CONTAINER */
     div[data-testid="stVerticalBlock"] > div:has(div.nav-button) {
         background-color: transparent;
         padding: 0rem;
@@ -48,14 +49,14 @@ st.markdown("""
         box-shadow: 0px 4px 20px rgba(39, 40, 56, 0.03);
     }
     
-    /* --- TRANSPARENT NAVIGATION BUTTONS --- */
+    /* NAVIGATION BUTTONS */
     div.stButton > button {
         background-color: transparent !important;
-        color: #272838 !important; /* TEXT COLOR MATCHES THEME */
+        color: #272838 !important;
         border: none;
         height: 3rem;
         font-weight: 700;
-        font-size: 20px !important; /* Made these slightly larger too */
+        font-size: 20px !important;
         transition: all 0.3s ease;
         width: 100%;
         text-align: center;
@@ -64,13 +65,12 @@ st.markdown("""
     
     div.stButton > button:hover {
         background-color: rgba(39, 40, 56, 0.05) !important; 
-        color: #272838 !important;
         border-radius: 8px;
     }
     
     div.stButton > button p { color: #272838 !important; }
 
-    /* --- PRIMARY ACTION BUTTON --- */
+    /* PRIMARY ACTION BUTTON */
     button[kind="primary"] {
         background-color: #815355 !important;
         color: white !important;
@@ -106,14 +106,13 @@ st.markdown("""
 if "vault" not in st.session_state: st.session_state.vault = []
 if "page" not in st.session_state: st.session_state.page = "Home"
 if "current_report" not in st.session_state: st.session_state.current_report = ""
+if "current_diet" not in st.session_state: st.session_state.current_diet = ""
 
 # --- 4. TOP NAVIGATION BAR ---
 with st.container():
-    # Adjusted column widths to give logo more space
-    col_logo, col_nav_buttons, col_status = st.columns([4, 5, 2])
+    col_logo, col_nav_buttons, col_status = st.columns([3, 4, 3])
     
     with col_logo:
-        # INLINE CSS TO FORCE SIZE (The "Nuclear Option")
         st.markdown("""
             <h1 style='
                 font-family: "DM Sans", sans-serif;
@@ -130,7 +129,6 @@ with st.container():
         """, unsafe_allow_html=True)
         
     with col_nav_buttons:
-        # Pushes buttons down to vertically align with the center of the big logo
         st.markdown('<div style="height: 10px;"></div>', unsafe_allow_html=True)
         nav_1, nav_2, nav_3 = st.columns(3)
         with nav_1:
@@ -142,7 +140,9 @@ with st.container():
                 
     with col_status:
         st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True)
-        st.markdown('<div class="status-badge">● Secure Connection</div>', unsafe_allow_html=True)
+        col_spacer, col_badge = st.columns([1, 2])
+        with col_badge:
+            st.markdown('<div class="status-badge">● Secure Connection</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -170,6 +170,15 @@ def create_pdf(summary, action_plan):
     content = content.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 10, content)
     return pdf.output(dest='S').encode('latin-1')
+
+def text_to_speech(text, lang_code='en'):
+    try:
+        tts = gTTS(text=text[:500], lang=lang_code) # Limit to 500 chars for speed
+        fp = io.BytesIO()
+        tts.write_to_fp(fp)
+        return fp
+    except:
+        return None
 
 def save_to_vault(name, type, content, summary="Pending", data=None, date=None):
     for f in st.session_state.vault:
@@ -227,17 +236,23 @@ if st.session_state.page == "Home":
 
         with col2:
             st.markdown("##### Intelligence Console")
+            
+            # --- NEW FEATURE: GLOBAL HEALTH (Language Selector) ---
+            lang_options = {"English": "en", "Spanish": "es", "French": "fr", "Hindi": "hi", "Chinese": "zh-CN"}
+            selected_lang = st.selectbox("Output Language", list(lang_options.keys()))
+            lang_code = lang_options[selected_lang]
+
             if uploaded_file:
                 if st.button("Run Diagnostics", type="primary"):
                     client = genai.Client(api_key=api_key)
                     with st.spinner("Analyzing..."):
                         try:
-                            prompt = """
-                            Act as a senior medical analyst. 
-                            TASK 1: SUMMARY. Write a clear summary.
-                            TASK 2: VITALS. JSON list at end: [{"Test":"Name", "Value":0, "Unit":"x"}].
-                            TASK 3: ACTION PLAN. List 3 specific lifestyle changes based on this data.
-                            TASK 4: DATE. Extract the report date as YYYY-MM-DD. If none, say "TODAY".
+                            # UPDATED PROMPT: HANDLES LANGUAGE
+                            prompt = f"""
+                            Act as a senior medical analyst. Response Language: {selected_lang}.
+                            TASK 1: SUMMARY. Write a clear summary in {selected_lang}.
+                            TASK 2: VITALS. JSON list at end: [{{"Test":"Name", "Value":0, "Unit":"x"}}].
+                            TASK 3: ACTION PLAN. List 3 specific lifestyle changes in {selected_lang}.
                             """
                             response = get_gemini_response(client, evidence, prompt)
                             full_text = response.text
@@ -253,6 +268,8 @@ if st.session_state.page == "Home":
 
                             st.session_state.current_report = summary_text
                             st.session_state.current_data = data_json
+                            # Reset diet when new report runs
+                            st.session_state.current_diet = ""
                             
                             for f in st.session_state.vault:
                                 if f['name'] == uploaded_file.name:
@@ -263,21 +280,45 @@ if st.session_state.page == "Home":
                             st.error(f"Error: {e}")
 
                 if st.session_state.current_report:
-                    tab_sum, tab_chat, tab_export = st.tabs(["📊 Report", "💬 Doc Talk", "📥 Export"])
+                    # --- NEW TABS: Diet & Audio ---
+                    tab_sum, tab_diet, tab_chat, tab_export = st.tabs(["📊 Report", "🍎 Diet Plan", "💬 Doc Talk", "📥 Export"])
                     
                     with tab_sum:
                         st.markdown(st.session_state.current_report)
+                        
+                        # --- NEW FEATURE: AUDIO PLAYER ---
+                        st.markdown("---")
+                        st.caption("🎧 Listen to Summary")
+                        # We use the lang_code mapped earlier (e.g., 'es' for Spanish audio)
+                        audio_file = text_to_speech(st.session_state.current_report, lang_code=lang_code[:2]) 
+                        if audio_file:
+                            st.audio(audio_file, format='audio/mp3')
+
                         if "current_data" in st.session_state and st.session_state.current_data:
                             df = pd.DataFrame(st.session_state.current_data)
                             df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
                             st.bar_chart(df.set_index("Test")['Value'], color="#815355")
 
+                    with tab_diet:
+                        # --- NEW FEATURE: DIET GENERATOR ---
+                        st.markdown("##### Food is Medicine")
+                        if st.button("Generate Meal Plan"):
+                            client = genai.Client(api_key=api_key)
+                            diet_prompt = f"Based on this medical summary: '{st.session_state.current_report}', create a strict 3-day meal plan to improve the patient's condition. Language: {selected_lang}."
+                            with st.spinner("Chef AI is cooking..."):
+                                diet_resp = get_gemini_response(client, "Context", diet_prompt)
+                                st.session_state.current_diet = diet_resp.text
+                        
+                        if st.session_state.current_diet:
+                            st.success("Personalized Plan Created")
+                            st.markdown(st.session_state.current_diet)
+
                     with tab_chat:
                         st.markdown("##### Ask Dr. AI")
-                        user_query = st.text_input("Ask a question about this report:", placeholder="e.g., Is my iron low?")
+                        user_query = st.text_input("Ask a question:", placeholder="e.g., Is my iron low?")
                         if user_query:
                             client = genai.Client(api_key=api_key)
-                            chat_prompt = f"Context: {st.session_state.current_report}. Question: {user_query}. Keep it short and medical."
+                            chat_prompt = f"Context: {st.session_state.current_report}. Question: {user_query}. Answer in {selected_lang}."
                             with st.spinner("Thinking..."):
                                 answer = get_gemini_response(client, "Context Provided", chat_prompt)
                                 st.info(f"**AI:** {answer.text}")
