@@ -8,11 +8,15 @@ import time
 from fpdf import FPDF
 import io
 from gtts import gTTS
+import os
 
 # --- 1. PAGE CONFIG ---
+icon_path = "medilink_logo.png"
+page_icon = Image.open(icon_path) if os.path.exists(icon_path) else None
+
 st.set_page_config(
     page_title="MediLink",
-    page_icon=None,
+    page_icon=page_icon,
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -119,23 +123,13 @@ with st.container():
     col_logo, col_nav_buttons, col_status = st.columns([3, 4, 3])
     
     with col_logo:
-        st.markdown("""
-            <h1 style='
-                font-family: "DM Sans", sans-serif;
-                font-weight: 900;
-                font-size: 60px;
-                color: #272838;
-                margin-top: -15px;
-                margin-bottom: 0px;
-                line-height: 1;
-                letter-spacing: -2px;
-            '>
-                MEDILINK
-            </h1>
-        """, unsafe_allow_html=True)
+        if os.path.exists("medilink_logo.png"):
+            st.image("medilink_logo.png", width=280)
+        else:
+            st.markdown("## MEDILINK")
         
     with col_nav_buttons:
-        st.markdown('<div style="height: 10px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 20px;"></div>', unsafe_allow_html=True)
         nav_1, nav_2, nav_3 = st.columns(3)
         with nav_1:
             if st.button("Home", use_container_width=True): st.session_state.page = "Home"
@@ -145,7 +139,7 @@ with st.container():
             if st.button("Files", use_container_width=True): st.session_state.page = "Files"
                 
     with col_status:
-        st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 25px;"></div>', unsafe_allow_html=True)
         col_spacer, col_badge = st.columns([1, 2])
         with col_badge:
             st.markdown('<div class="status-badge">● Secure Connection</div>', unsafe_allow_html=True)
@@ -173,7 +167,10 @@ def create_pdf(summary, action_plan):
     pdf.ln(20)
     pdf.set_font("Arial", '', 12)
     content = f"Clinical Summary:\n\n{summary}\n\nAction Plan:\n\n{action_plan}"
-    content = content.encode('latin-1', 'replace').decode('latin-1')
+    try:
+        content = content.encode('latin-1', 'replace').decode('latin-1')
+    except:
+        content = "Error encoding characters."
     pdf.multi_cell(0, 10, content)
     return pdf.output(dest='S').encode('latin-1')
 
@@ -246,7 +243,6 @@ if st.session_state.page == "Home":
                     type_label = "Text"
                     st.text_area("Content", evidence[:200], height=150)
 
-                # Save with specific type
                 save_to_vault(uploaded_file.name, type_label, evidence)
 
         with col2:
@@ -270,11 +266,7 @@ if st.session_state.page == "Home":
                         client = genai.Client(api_key=api_key)
                         with st.spinner("Extracting data points..."):
                             try:
-                                prompt = f"""
-                                Extract numerical health data from this document.
-                                OUTPUT ONLY JSON: [{{"Test":"Name", "Value":0, "Unit":"x"}}]
-                                If no data, return [].
-                                """
+                                prompt = f"Extract numerical health data. OUTPUT ONLY JSON: [{{'Test':'Name', 'Value':0, 'Unit':'x'}}]. If no data, return []."
                                 response = get_gemini_response(client, evidence, prompt)
                                 txt = response.text
                                 j_start = txt.find("[")
@@ -282,11 +274,10 @@ if st.session_state.page == "Home":
                                 if j_start != -1 and j_end != -1:
                                     data_json = json.loads(txt[j_start:j_end])
                                     save_to_vault(uploaded_file.name, type_label, evidence, data=data_json)
-                                
                                 st.session_state.page = "Trends"
                                 st.rerun()
-                            except Exception as e:
-                                st.error("Could not extract data for trends.")
+                            except:
+                                st.error("Could not extract data.")
                 
                 st.markdown("---")
                 
@@ -295,10 +286,10 @@ if st.session_state.page == "Home":
                     with st.spinner("Analyzing..."):
                         try:
                             prompt = f"""
-                            Act as a senior medical analyst. Response Language: {selected_lang}.
-                            TASK 1: SUMMARY. Write a clear summary in {selected_lang}.
-                            TASK 2: VITALS. JSON list at end: [{{"Test":"Name", "Value":0, "Unit":"x"}}].
-                            TASK 3: ACTION PLAN. List 3 specific lifestyle changes in {selected_lang}.
+                            Act as a senior medical analyst. Language: {selected_lang}.
+                            1. SUMMARY: Clear summary.
+                            2. VITALS: JSON list at end: [{{'Test':'Name', 'Value':0, 'Unit':'x'}}].
+                            3. ACTION PLAN: 3 lifestyle changes.
                             """
                             response = get_gemini_response(client, evidence, prompt)
                             full_text = response.text
@@ -314,8 +305,6 @@ if st.session_state.page == "Home":
 
                             st.session_state.current_report = summary_text
                             st.session_state.current_data = data_json
-                            st.session_state.current_diet = ""
-                            
                             save_to_vault(uploaded_file.name, type_label, evidence, summary=summary_text, data=data_json)
                             
                         except Exception as e:
@@ -331,7 +320,6 @@ if st.session_state.page == "Home":
                         audio_file = text_to_speech(st.session_state.current_report, lang_code=lang_code[:2]) 
                         if audio_file:
                             st.audio(audio_file, format='audio/mp3')
-
                         if "current_data" in st.session_state and st.session_state.current_data:
                             df = pd.DataFrame(st.session_state.current_data)
                             df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
@@ -345,7 +333,6 @@ if st.session_state.page == "Home":
                             with st.spinner("Chef AI is cooking..."):
                                 diet_resp = get_gemini_response(client, "Context", diet_prompt)
                                 st.session_state.current_diet = diet_resp.text
-                        
                         if st.session_state.current_diet:
                             st.success("Plan Created")
                             st.markdown(st.session_state.current_diet)
@@ -364,20 +351,13 @@ if st.session_state.page == "Home":
                         st.markdown("##### Official Download")
                         if st.button("Generate PDF Report"):
                             pdf_bytes = create_pdf(st.session_state.current_report, "See Summary for details.")
-                            st.download_button(
-                                label="Download PDF",
-                                data=pdf_bytes,
-                                file_name="medilink_report.pdf",
-                                mime="application/pdf"
-                            )
+                            st.download_button("Download PDF", pdf_bytes, "medilink_report.pdf", "application/pdf")
             else:
                 st.info("Awaiting file upload...")
 
 # ================= PAGE 2: TRENDS =================
 elif st.session_state.page == "Trends":
     st.markdown("### Health Trends")
-    st.markdown("Longitudinal analysis of your uploaded records.")
-    
     if not st.session_state.vault:
         st.info("Upload multiple reports in 'Home' to see trends here.")
     else:
@@ -385,90 +365,79 @@ elif st.session_state.page == "Trends":
         for f in st.session_state.vault:
             if f.get('data'):
                 for item in f['data']:
-                    all_vitals.append({
-                        "Date": f['timestamp'],
-                        "Test": item['Test'],
-                        "Value": item['Value']
-                    })
+                    all_vitals.append({"Date": f['timestamp'], "Test": item['Test'], "Value": item['Value']})
         
         if all_vitals:
             df_trends = pd.DataFrame(all_vitals)
             df_trends['Value'] = pd.to_numeric(df_trends['Value'], errors='coerce')
-            
             tests = df_trends['Test'].unique()
             selected_test = st.selectbox("Select Vital Sign to Track", tests)
-            
             chart_data = df_trends[df_trends['Test'] == selected_test]
             st.line_chart(chart_data.set_index("Date")['Value'], color="#815355")
-            
-            st.markdown(f"""
-            <div style="background-color: #AFCBD5; padding: 20px; border-radius: 10px; border-left: 5px solid #815355;">
-                <b>Insight:</b> Tracking <b>{selected_test}</b> across {len(chart_data)} data points.
-            </div>
-            """, unsafe_allow_html=True)
         else:
             st.warning("No numerical data found yet. Go to Home > Upload > Click 'Add to Trends'.")
 
 # ================= PAGE 3: FILES (FIXED) =================
 elif st.session_state.page == "Files":
     st.markdown("### Secure Archive")
-    
     if not st.session_state.vault:
         st.info("No records found.")
     else:
         for i, f in enumerate(st.session_state.vault):
             with st.expander(f"{f['name']}   |   {f['timestamp']}"):
-                
                 c1, c2, c3 = st.columns([3, 1, 1])
-                
                 with c1:
                     new_name = st.text_input("Rename File", f['name'], key=f"rename_{i}")
                     if new_name != f['name']:
                         f['name'] = new_name
                         st.success("Renamed")
                         st.rerun()
-
                 with c2:
                     st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
                     
-                    # SAFE DOWNLOAD LOGIC
-                    data_to_download = f['content']
+                    # --- CRASH FIX START ---
+                    # 1. Initialize variables safely
+                    data_to_download = None
                     file_ext = "txt"
                     mime_type = "text/plain"
-                    
-                    if isinstance(f['content'], Image.Image):
-                        img_byte_arr = io.BytesIO()
-                        f['content'].save(img_byte_arr, format='PNG')
-                        data_to_download = img_byte_arr.getvalue()
-                        file_ext = "png"
-                        mime_type = "image/png"
-                    elif isinstance(f['content'], str):
-                         data_to_download = f['content'].encode("utf-8")
-                    
-                    st.download_button(
-                        label="Download",
-                        data=data_to_download,
-                        file_name=f"medilink_file_{i}.{file_ext}",
-                        mime=mime_type,
-                        key=f"dl_{i}",
-                        use_container_width=True
-                    )
-                
+
+                    try:
+                        # 2. Check if content exists and what type it is
+                        if f.get('content') is not None:
+                            if isinstance(f['content'], Image.Image):
+                                img_byte_arr = io.BytesIO()
+                                f['content'].save(img_byte_arr, format='PNG')
+                                data_to_download = img_byte_arr.getvalue()
+                                file_ext = "png"
+                                mime_type = "image/png"
+                            elif isinstance(f['content'], str):
+                                data_to_download = f['content'].encode("utf-8")
+                            elif isinstance(f['content'], bytes):
+                                data_to_download = f['content']
+                            else:
+                                data_to_download = str(f['content']).encode("utf-8")
+                    except Exception as e:
+                        st.error(f"Error preparing download: {e}")
+
+                    # 3. Only show button if data is valid
+                    if data_to_download:
+                        st.download_button(
+                            label="Download", 
+                            data=data_to_download, 
+                            file_name=f"medilink_file_{i}.{file_ext}", 
+                            mime=mime_type, 
+                            key=f"dl_{i}", 
+                            use_container_width=True
+                        )
+                    else:
+                        st.warning("Download unavailable")
+                    # --- CRASH FIX END ---
+
                 st.markdown("---")
-                st.markdown("#### Preview Content")
-                
                 if isinstance(f['content'], Image.Image):
                     st.image(f['content'], use_container_width=True)
                 else:
                     st.text_area("File Content", str(f['content']), height=200, key=f"prev_{i}")
-                
                 if f['summary'] != "Pending":
                     st.markdown("#### Clinical Summary")
                     st.write(f['summary'])
-                if f.get('data'):
-                    st.markdown("#### Extracted Data Points")
-                    df = pd.DataFrame(f['data'])
-                    df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
-                    st.dataframe(df)        
-
-# --- END OF FILE ---
