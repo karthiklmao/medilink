@@ -1,7 +1,7 @@
 [theme]
 base = "light"
-primaryColor = "#2563EB" 
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F8FAFC"
-textColor = "#1E293B"
+primaryColor = "#4318FF"  # Horizon Purple
+backgroundColor = "#F4F7FE" # Very light blue-grey background (not pure white)
+secondaryBackgroundColor = "#FFFFFF" # Sidebar becomes pure white
+textColor = "#2B3674"
 font = "sans serif"
