@@ -1,6 +1,7 @@
 import streamlit as st
 import PyPDF2
-import google.generativeai as genai
+from google import genai  # NEW LIBRARY IMPORT
+from google.genai import types
 from PIL import Image
 import pandas as pd
 import json
@@ -151,30 +152,29 @@ st.markdown("---")
 
 # --- HELPER FUNCTIONS ---
 def get_gemini_response(api_key, content, prompt):
-    genai.configure(api_key=api_key)
-    
-    # --- SMART MODEL SELECTOR ---
-    # 1. Try the Modern "Flash" Model (Best for Speed & Images)
+    # --- NEW GOOGLE GENAI CLIENT ---
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content([prompt, content])
+        client = genai.Client(api_key=api_key)
+        
+        # Prepare content list
+        contents_list = [prompt]
+        
+        # Add the image or text evidence
+        if isinstance(content, Image.Image):
+             contents_list.append(content)
+        elif isinstance(content, str):
+             contents_list.append(content)
+             
+        # Call the new API
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=contents_list
+        )
         return response.text
-    except Exception as e_flash:
-        # 2. If Flash fails (404 error), Fallback to "Pro" (Safe Mode)
-        try:
-            # If it's an image, we need Pro Vision
-            if isinstance(content, Image.Image):
-                 model = genai.GenerativeModel('gemini-pro-vision')
-            # If it's text, we use Pro
-            else:
-                 model = genai.GenerativeModel('gemini-pro')
-                 
-            response = model.generate_content([prompt, content])
-            return response.text
-            
-        except Exception as e_pro:
-            st.error(f"AI Error: {str(e_pro)}")
-            return None
+        
+    except Exception as e:
+        st.error(f"AI Connection Error: {str(e)}")
+        return None
 
 def create_pdf(summary, action_plan):
     pdf = FPDF()
