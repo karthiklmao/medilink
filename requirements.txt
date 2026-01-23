@@ -1,6 +1,6 @@
 streamlit
-PyPDF2
 google-genai
+PyPDF2
 Pillow
 pandas
 fpdf
