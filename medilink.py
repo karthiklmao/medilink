@@ -1,6 +1,6 @@
 import streamlit as st
 import PyPDF2
-from groq import Groq  # <--- FIXED IMPORT LINE
+from groq import Groq
 from PIL import Image
 import pandas as pd
 import json
@@ -154,7 +154,7 @@ st.markdown("---")
 
 def encode_image(image):
     buffered = io.BytesIO()
-    image.save(buffered, format="PNG")
+    image.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 def get_groq_response(api_key, content, prompt):
@@ -163,7 +163,7 @@ def get_groq_response(api_key, content, prompt):
         
         messages = []
         
-        # CASE 1: IMAGE (Llama 3.2 Vision)
+        # CASE 1: IMAGE (Llama 4 Scout - The New Official Vision Model)
         if isinstance(content, Image.Image):
             base64_image = encode_image(content)
             messages = [
@@ -180,7 +180,8 @@ def get_groq_response(api_key, content, prompt):
                     ]
                 }
             ]
-            model = "llama-3.2-11b-vision-preview" 
+            # UPDATED MODEL NAME - Old one was decommissioned
+            model = "meta-llama/llama-4-scout-17b-16e-instruct" 
             
         # CASE 2: TEXT (Llama 3 70B)
         else:
