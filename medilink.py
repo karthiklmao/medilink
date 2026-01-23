@@ -1,6 +1,6 @@
 import streamlit as st
 import PyPDF2
-import google.generativeai as genai  # SWITCHED TO STABLE LIBRARY
+import google.generativeai as genai
 from PIL import Image
 import pandas as pd
 import json
@@ -127,10 +127,12 @@ with st.container():
         if os.path.exists("medilink_logo.png"):
             st.image("medilink_logo.png", width=280)
         else:
-            st.markdown("## MEDILINK")
+            st.markdown("""
+                <h1 style='font-family: "DM Sans", sans-serif; font-weight: 900; font-size: 50px; color: #272838 !important; margin-top: -15px; margin-bottom: 0px; line-height: 1; letter-spacing: -2px;'>MEDILINK</h1>
+            """, unsafe_allow_html=True)
         
     with col_nav_buttons:
-        st.markdown('<div style="height: 20px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 10px;"></div>', unsafe_allow_html=True)
         nav_1, nav_2, nav_3 = st.columns(3)
         with nav_1:
             if st.button("Home", use_container_width=True): st.session_state.page = "Home"
@@ -140,7 +142,7 @@ with st.container():
             if st.button("Files", use_container_width=True): st.session_state.page = "Files"
                 
     with col_status:
-        st.markdown('<div style="height: 25px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True)
         col_spacer, col_badge = st.columns([1, 2])
         with col_badge:
             st.markdown('<div class="status-badge">● Secure Connection</div>', unsafe_allow_html=True)
@@ -149,16 +151,30 @@ st.markdown("---")
 
 # --- HELPER FUNCTIONS ---
 def get_gemini_response(api_key, content, prompt):
-    # STABLE GENERATION LOGIC
+    genai.configure(api_key=api_key)
+    
+    # --- SMART MODEL SELECTOR ---
+    # 1. Try the Modern "Flash" Model (Best for Speed & Images)
     try:
-        genai.configure(api_key=api_key)
-        # Using 1.5-flash as it is the most stable free tier model currently
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content([prompt, content])
         return response.text
-    except Exception as e:
-        st.error(f"AI Error: {str(e)}") # PRINT ERROR TO SCREEN
-        return None
+    except Exception as e_flash:
+        # 2. If Flash fails (404 error), Fallback to "Pro" (Safe Mode)
+        try:
+            # If it's an image, we need Pro Vision
+            if isinstance(content, Image.Image):
+                 model = genai.GenerativeModel('gemini-pro-vision')
+            # If it's text, we use Pro
+            else:
+                 model = genai.GenerativeModel('gemini-pro')
+                 
+            response = model.generate_content([prompt, content])
+            return response.text
+            
+        except Exception as e_pro:
+            st.error(f"AI Error: {str(e_pro)}")
+            return None
 
 def create_pdf(summary, action_plan):
     pdf = FPDF()
@@ -209,19 +225,16 @@ if st.session_state.page == "Home":
     st.markdown("### Home")
     st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
 
-    # --- API KEY LOADING ---
+    # --- SAFE API KEY CHECK ---
     api_key = None
-    # 1. Try Secrets
     try:
         if "GEMINI_KEY" in st.secrets:
             api_key = st.secrets["GEMINI_KEY"]
     except:
         pass
     
-    # 2. Fallback to Input
     if not api_key:
-        st.warning("⚠️ No API Key found in Secrets. Please enter it below.")
-        api_key = st.text_input("Gemini API Key", type="password")
+        api_key = st.text_input("License Key", type="password")
 
     if api_key:
         col1, col2 = st.columns([1, 2], gap="large")
@@ -236,22 +249,17 @@ if st.session_state.page == "Home":
                 evidence = None
                 type_label = "File"
                 
-                # Image Handling (PIL)
                 if "image" in file_type:
                     uploaded_file.seek(0)
                     evidence = Image.open(uploaded_file)
                     type_label = "Image"
                     st.image(evidence, use_container_width=True)
-                
-                # PDF Handling
                 elif "pdf" in file_type:
                     uploaded_file.seek(0)
                     reader = PyPDF2.PdfReader(uploaded_file)
                     evidence = "".join([p.extract_text() for p in reader.pages])
                     type_label = "PDF"
                     st.info(f"{len(reader.pages)} Pages Processed")
-
-                # Text Handling
                 elif "text" in file_type:
                     uploaded_file.seek(0)
                     evidence = uploaded_file.read().decode("utf-8")
@@ -280,8 +288,7 @@ if st.session_state.page == "Home":
                     if st.button("Add to Trends & View", type="secondary", use_container_width=True):
                          with st.spinner("Extracting..."):
                             prompt = "Extract numerical health data. OUTPUT ONLY JSON: [{'Test':'Name', 'Value':0, 'Unit':'x'}]. If no data, return []."
-                            res_text = get_gemini_response(api_key, evidence, prompt) # Use new function
-                            
+                            res_text = get_gemini_response(api_key, evidence, prompt)
                             if res_text:
                                 try:
                                     j_start = res_text.find("[")
