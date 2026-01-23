@@ -1,6 +1,6 @@
 import streamlit as st
 import PyPDF2
-from groq import Groq  # NEW FREE LIBRARY
+from groq import Groq  # <--- FIXED IMPORT LINE
 from PIL import Image
 import pandas as pd
 import json
@@ -180,7 +180,7 @@ def get_groq_response(api_key, content, prompt):
                     ]
                 }
             ]
-            model = "llama-3.2-11b-vision-preview" # Free Vision Model
+            model = "llama-3.2-11b-vision-preview" 
             
         # CASE 2: TEXT (Llama 3 70B)
         else:
@@ -188,7 +188,7 @@ def get_groq_response(api_key, content, prompt):
                 {"role": "system", "content": "You are a helpful medical analyst assistant."},
                 {"role": "user", "content": f"{prompt}\n\nDATA:\n{content}"}
             ]
-            model = "llama3-70b-8192" # High Intelligence Text Model
+            model = "llama3-70b-8192" 
 
         # Call Groq
         response = client.chat.completions.create(
@@ -255,13 +255,11 @@ if st.session_state.page == "Home":
     # --- SAFE API KEY CHECK (GROQ) ---
     api_key = None
     try:
-        # Check for GROQ_KEY in secrets
         if "GROQ_KEY" in st.secrets:
             api_key = st.secrets["GROQ_KEY"]
     except:
         pass
     
-    # If no key found, ask user
     if not api_key:
         api_key = st.text_input("Groq API Key (gsk_...)", type="password", help="Get for free at console.groq.com")
 
@@ -315,12 +313,11 @@ if st.session_state.page == "Home":
 
                 with q_col2:
                     if st.button("Add to Trends & View", type="secondary", use_container_width=True):
-                         with st.spinner("Analyzing with Groq (Llama 3)..."):
+                         with st.spinner("Analyzing with Groq..."):
                             prompt = "Extract numerical health data. OUTPUT ONLY JSON: [{'Test':'Name', 'Value':0, 'Unit':'x'}]. If no data, return []."
                             res_text = get_groq_response(api_key, evidence, prompt)
                             if res_text:
                                 try:
-                                    # Llama sometimes adds text before/after JSON, so we find the brackets
                                     j_start = res_text.find("[")
                                     j_end = res_text.rfind("]") + 1
                                     data_json = json.loads(res_text[j_start:j_end])
