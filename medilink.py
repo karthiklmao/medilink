@@ -1,7 +1,6 @@
 import streamlit as st
 import PyPDF2
-from google import genai  # NEW LIBRARY IMPORT
-from google.genai import types
+from groq import Groq  # NEW FREE LIBRARY
 from PIL import Image
 import pandas as pd
 import json
@@ -10,6 +9,7 @@ from fpdf import FPDF
 import io
 from gtts import gTTS
 import os
+import base64
 
 # --- 1. PAGE CONFIG ---
 icon_path = "medilink_logo.png"
@@ -151,29 +151,56 @@ with st.container():
 st.markdown("---")
 
 # --- HELPER FUNCTIONS ---
-def get_gemini_response(api_key, content, prompt):
-    # --- NEW GOOGLE GENAI CLIENT ---
+
+def encode_image(image):
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+def get_groq_response(api_key, content, prompt):
     try:
-        client = genai.Client(api_key=api_key)
+        client = Groq(api_key=api_key)
         
-        # Prepare content list
-        contents_list = [prompt]
+        messages = []
         
-        # Add the image or text evidence
+        # CASE 1: IMAGE (Llama 3.2 Vision)
         if isinstance(content, Image.Image):
-             contents_list.append(content)
-        elif isinstance(content, str):
-             contents_list.append(content)
-             
-        # Call the new API
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=contents_list
+            base64_image = encode_image(content)
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ]
+            model = "llama-3.2-11b-vision-preview" # Free Vision Model
+            
+        # CASE 2: TEXT (Llama 3 70B)
+        else:
+            messages = [
+                {"role": "system", "content": "You are a helpful medical analyst assistant."},
+                {"role": "user", "content": f"{prompt}\n\nDATA:\n{content}"}
+            ]
+            model = "llama3-70b-8192" # High Intelligence Text Model
+
+        # Call Groq
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.5,
+            max_tokens=1024,
         )
-        return response.text
+        return response.choices[0].message.content
         
     except Exception as e:
-        st.error(f"AI Connection Error: {str(e)}")
+        st.error(f"Groq Error: {str(e)}")
         return None
 
 def create_pdf(summary, action_plan):
@@ -225,16 +252,18 @@ if st.session_state.page == "Home":
     st.markdown("### Home")
     st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
 
-    # --- SAFE API KEY CHECK ---
+    # --- SAFE API KEY CHECK (GROQ) ---
     api_key = None
     try:
-        if "GEMINI_KEY" in st.secrets:
-            api_key = st.secrets["GEMINI_KEY"]
+        # Check for GROQ_KEY in secrets
+        if "GROQ_KEY" in st.secrets:
+            api_key = st.secrets["GROQ_KEY"]
     except:
         pass
     
+    # If no key found, ask user
     if not api_key:
-        api_key = st.text_input("License Key", type="password")
+        api_key = st.text_input("Groq API Key (gsk_...)", type="password", help="Get for free at console.groq.com")
 
     if api_key:
         col1, col2 = st.columns([1, 2], gap="large")
@@ -286,11 +315,12 @@ if st.session_state.page == "Home":
 
                 with q_col2:
                     if st.button("Add to Trends & View", type="secondary", use_container_width=True):
-                         with st.spinner("Extracting..."):
+                         with st.spinner("Analyzing with Groq (Llama 3)..."):
                             prompt = "Extract numerical health data. OUTPUT ONLY JSON: [{'Test':'Name', 'Value':0, 'Unit':'x'}]. If no data, return []."
-                            res_text = get_gemini_response(api_key, evidence, prompt)
+                            res_text = get_groq_response(api_key, evidence, prompt)
                             if res_text:
                                 try:
+                                    # Llama sometimes adds text before/after JSON, so we find the brackets
                                     j_start = res_text.find("[")
                                     j_end = res_text.rfind("]") + 1
                                     data_json = json.loads(res_text[j_start:j_end])
@@ -303,14 +333,14 @@ if st.session_state.page == "Home":
                 st.markdown("---")
                 
                 if st.button("Run Full Diagnostics", type="primary"):
-                    with st.spinner("Analyzing..."):
+                    with st.spinner("Consulting Groq AI..."):
                         prompt = f"""
                         Act as a senior medical analyst. Language: {selected_lang}.
                         1. SUMMARY: Clear summary.
                         2. VITALS: JSON list at end: [{{'Test':'Name', 'Value':0, 'Unit':'x'}}].
                         3. ACTION PLAN: 3 lifestyle changes.
                         """
-                        full_text = get_gemini_response(api_key, evidence, prompt)
+                        full_text = get_groq_response(api_key, evidence, prompt)
 
                         if full_text:
                             try:
@@ -344,9 +374,9 @@ if st.session_state.page == "Home":
                     with tab_diet:
                         st.markdown("##### Food is Medicine")
                         if st.button("Generate Meal Plan"):
-                            with st.spinner("Cooking..."):
+                            with st.spinner("Chef AI is cooking..."):
                                 diet_prompt = f"Create a 3-day meal plan based on: {st.session_state.current_report}. Language: {selected_lang}."
-                                diet_resp = get_gemini_response(api_key, "Context", diet_prompt)
+                                diet_resp = get_groq_response(api_key, "Context", diet_prompt)
                                 st.session_state.current_diet = diet_resp
                         if st.session_state.current_diet:
                             st.success("Plan Created")
@@ -358,7 +388,7 @@ if st.session_state.page == "Home":
                         if user_query:
                             with st.spinner("Thinking..."):
                                 chat_prompt = f"Context: {st.session_state.current_report}. Question: {user_query}. Answer in {selected_lang}."
-                                answer = get_gemini_response(api_key, "Context Provided", chat_prompt)
+                                answer = get_groq_response(api_key, "Context Provided", chat_prompt)
                                 st.info(f"**AI:** {answer}")
 
                     with tab_export:
