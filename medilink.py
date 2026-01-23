@@ -1,6 +1,6 @@
 import streamlit as st
 import PyPDF2
-from google import genai
+import google.generativeai as genai  # SWITCHED TO STABLE LIBRARY
 from PIL import Image
 import pandas as pd
 import json
@@ -28,7 +28,7 @@ st.markdown("""
     
     html, body, [class*="css"] {
         font-family: 'DM Sans', sans-serif;
-        color: #272838 !important; /* Force Dark Text everywhere */
+        color: #272838 !important;
     }
     
     .stApp {
@@ -124,27 +124,13 @@ with st.container():
     col_logo, col_nav_buttons, col_status = st.columns([3, 4, 3])
     
     with col_logo:
-        # Check for image, fallback to TEXT if missing (Using !important to force black color)
         if os.path.exists("medilink_logo.png"):
             st.image("medilink_logo.png", width=280)
         else:
-            st.markdown("""
-                <h1 style='
-                    font-family: "DM Sans", sans-serif;
-                    font-weight: 900;
-                    font-size: 50px;
-                    color: #272838 !important; 
-                    margin-top: -15px;
-                    margin-bottom: 0px;
-                    line-height: 1;
-                    letter-spacing: -2px;
-                '>
-                    MEDILINK
-                </h1>
-            """, unsafe_allow_html=True)
+            st.markdown("## MEDILINK")
         
     with col_nav_buttons:
-        st.markdown('<div style="height: 10px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 20px;"></div>', unsafe_allow_html=True)
         nav_1, nav_2, nav_3 = st.columns(3)
         with nav_1:
             if st.button("Home", use_container_width=True): st.session_state.page = "Home"
@@ -154,7 +140,7 @@ with st.container():
             if st.button("Files", use_container_width=True): st.session_state.page = "Files"
                 
     with col_status:
-        st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 25px;"></div>', unsafe_allow_html=True)
         col_spacer, col_badge = st.columns([1, 2])
         with col_badge:
             st.markdown('<div class="status-badge">● Secure Connection</div>', unsafe_allow_html=True)
@@ -162,17 +148,17 @@ with st.container():
 st.markdown("---")
 
 # --- HELPER FUNCTIONS ---
-def get_gemini_response(client, content, prompt):
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            return client.models.generate_content(model="gemini-2.0-flash", contents=[content, prompt])
-        except Exception as e:
-            if "429" in str(e):
-                time.sleep((attempt + 1) * 5)
-            else:
-                raise e
-    raise Exception("Service busy.")
+def get_gemini_response(api_key, content, prompt):
+    # STABLE GENERATION LOGIC
+    try:
+        genai.configure(api_key=api_key)
+        # Using 1.5-flash as it is the most stable free tier model currently
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content([prompt, content])
+        return response.text
+    except Exception as e:
+        st.error(f"AI Error: {str(e)}") # PRINT ERROR TO SCREEN
+        return None
 
 def create_pdf(summary, action_plan):
     pdf = FPDF()
@@ -191,6 +177,7 @@ def create_pdf(summary, action_plan):
 
 def text_to_speech(text, lang_code='en'):
     try:
+        if not text: return None
         tts = gTTS(text=text[:500], lang=lang_code)
         fp = io.BytesIO()
         tts.write_to_fp(fp)
@@ -222,18 +209,19 @@ if st.session_state.page == "Home":
     st.markdown("### Home")
     st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
 
-    # --- CRASH FIX: SAFE API KEY CHECK ---
+    # --- API KEY LOADING ---
     api_key = None
+    # 1. Try Secrets
     try:
-        # Safely try to access secrets. If it fails, catch it.
         if "GEMINI_KEY" in st.secrets:
             api_key = st.secrets["GEMINI_KEY"]
-    except Exception:
-        pass # Ignore the missing file error
-
-    # If key wasn't found automatically, ask user
+    except:
+        pass
+    
+    # 2. Fallback to Input
     if not api_key:
-        api_key = st.text_input("License Key (Required)", type="password", help="Enter your Gemini API key here")
+        st.warning("⚠️ No API Key found in Secrets. Please enter it below.")
+        api_key = st.text_input("Gemini API Key", type="password")
 
     if api_key:
         col1, col2 = st.columns([1, 2], gap="large")
@@ -248,18 +236,22 @@ if st.session_state.page == "Home":
                 evidence = None
                 type_label = "File"
                 
-                if "pdf" in file_type:
-                    uploaded_file.seek(0)
-                    reader = PyPDF2.PdfReader(uploaded_file)
-                    text = "".join([p.extract_text() for p in reader.pages])
-                    evidence = text
-                    type_label = "PDF"
-                    st.info(f"{len(reader.pages)} Pages Processed")
-                elif "image" in file_type:
+                # Image Handling (PIL)
+                if "image" in file_type:
                     uploaded_file.seek(0)
                     evidence = Image.open(uploaded_file)
                     type_label = "Image"
                     st.image(evidence, use_container_width=True)
+                
+                # PDF Handling
+                elif "pdf" in file_type:
+                    uploaded_file.seek(0)
+                    reader = PyPDF2.PdfReader(uploaded_file)
+                    evidence = "".join([p.extract_text() for p in reader.pages])
+                    type_label = "PDF"
+                    st.info(f"{len(reader.pages)} Pages Processed")
+
+                # Text Handling
                 elif "text" in file_type:
                     uploaded_file.seek(0)
                     evidence = uploaded_file.read().decode("utf-8")
@@ -286,37 +278,34 @@ if st.session_state.page == "Home":
 
                 with q_col2:
                     if st.button("Add to Trends & View", type="secondary", use_container_width=True):
-                        client = genai.Client(api_key=api_key)
-                        with st.spinner("Extracting data points..."):
-                            try:
-                                prompt = f"Extract numerical health data. OUTPUT ONLY JSON: [{{'Test':'Name', 'Value':0, 'Unit':'x'}}]. If no data, return []."
-                                response = get_gemini_response(client, evidence, prompt)
-                                txt = response.text
-                                j_start = txt.find("[")
-                                j_end = txt.rfind("]") + 1
-                                if j_start != -1 and j_end != -1:
-                                    data_json = json.loads(txt[j_start:j_end])
+                         with st.spinner("Extracting..."):
+                            prompt = "Extract numerical health data. OUTPUT ONLY JSON: [{'Test':'Name', 'Value':0, 'Unit':'x'}]. If no data, return []."
+                            res_text = get_gemini_response(api_key, evidence, prompt) # Use new function
+                            
+                            if res_text:
+                                try:
+                                    j_start = res_text.find("[")
+                                    j_end = res_text.rfind("]") + 1
+                                    data_json = json.loads(res_text[j_start:j_end])
                                     save_to_vault(uploaded_file.name, type_label, evidence, data=data_json)
-                                st.session_state.page = "Trends"
-                                st.rerun()
-                            except:
-                                st.error("Could not extract data.")
+                                    st.session_state.page = "Trends"
+                                    st.rerun()
+                                except:
+                                    st.error("Failed to parse AI response.")
                 
                 st.markdown("---")
                 
                 if st.button("Run Full Diagnostics", type="primary"):
-                    client = genai.Client(api_key=api_key)
                     with st.spinner("Analyzing..."):
-                        try:
-                            prompt = f"""
-                            Act as a senior medical analyst. Language: {selected_lang}.
-                            1. SUMMARY: Clear summary.
-                            2. VITALS: JSON list at end: [{{'Test':'Name', 'Value':0, 'Unit':'x'}}].
-                            3. ACTION PLAN: 3 lifestyle changes.
-                            """
-                            response = get_gemini_response(client, evidence, prompt)
-                            full_text = response.text
-                            
+                        prompt = f"""
+                        Act as a senior medical analyst. Language: {selected_lang}.
+                        1. SUMMARY: Clear summary.
+                        2. VITALS: JSON list at end: [{{'Test':'Name', 'Value':0, 'Unit':'x'}}].
+                        3. ACTION PLAN: 3 lifestyle changes.
+                        """
+                        full_text = get_gemini_response(api_key, evidence, prompt)
+
+                        if full_text:
                             try:
                                 j_start, j_end = full_text.rfind("["), full_text.rfind("]") + 1
                                 data_part = full_text[j_start:j_end]
@@ -329,9 +318,6 @@ if st.session_state.page == "Home":
                             st.session_state.current_report = summary_text
                             st.session_state.current_data = data_json
                             save_to_vault(uploaded_file.name, type_label, evidence, summary=summary_text, data=data_json)
-                            
-                        except Exception as e:
-                            st.error(f"Error: {e}")
 
                 if st.session_state.current_report:
                     tab_sum, tab_diet, tab_chat, tab_export = st.tabs(["Report", "Diet Plan", "Doc Talk", "Export"])
@@ -351,24 +337,22 @@ if st.session_state.page == "Home":
                     with tab_diet:
                         st.markdown("##### Food is Medicine")
                         if st.button("Generate Meal Plan"):
-                            client = genai.Client(api_key=api_key)
-                            diet_prompt = f"Based on: '{st.session_state.current_report}', create a 3-day meal plan. Language: {selected_lang}."
-                            with st.spinner("Chef AI is cooking..."):
-                                diet_resp = get_gemini_response(client, "Context", diet_prompt)
-                                st.session_state.current_diet = diet_resp.text
+                            with st.spinner("Cooking..."):
+                                diet_prompt = f"Create a 3-day meal plan based on: {st.session_state.current_report}. Language: {selected_lang}."
+                                diet_resp = get_gemini_response(api_key, "Context", diet_prompt)
+                                st.session_state.current_diet = diet_resp
                         if st.session_state.current_diet:
                             st.success("Plan Created")
                             st.markdown(st.session_state.current_diet)
 
                     with tab_chat:
                         st.markdown("##### Ask Dr. AI")
-                        user_query = st.text_input("Ask a question:", placeholder="e.g., Is my iron low?")
+                        user_query = st.text_input("Ask a question:")
                         if user_query:
-                            client = genai.Client(api_key=api_key)
-                            chat_prompt = f"Context: {st.session_state.current_report}. Question: {user_query}. Answer in {selected_lang}."
                             with st.spinner("Thinking..."):
-                                answer = get_gemini_response(client, "Context Provided", chat_prompt)
-                                st.info(f"**AI:** {answer.text}")
+                                chat_prompt = f"Context: {st.session_state.current_report}. Question: {user_query}. Answer in {selected_lang}."
+                                answer = get_gemini_response(api_key, "Context Provided", chat_prompt)
+                                st.info(f"**AI:** {answer}")
 
                     with tab_export:
                         st.markdown("##### Official Download")
@@ -398,7 +382,7 @@ elif st.session_state.page == "Trends":
             chart_data = df_trends[df_trends['Test'] == selected_test]
             st.line_chart(chart_data.set_index("Date")['Value'], color="#815355")
         else:
-            st.warning("No numerical data found yet. Go to Home > Upload > Click 'Add to Trends'.")
+            st.warning("No numerical data found yet.")
 
 # ================= PAGE 3: FILES =================
 elif st.session_state.page == "Files":
@@ -410,53 +394,28 @@ elif st.session_state.page == "Files":
             with st.expander(f"{f['name']}   |   {f['timestamp']}"):
                 c1, c2, c3 = st.columns([3, 1, 1])
                 with c1:
-                    new_name = st.text_input("Rename File", f['name'], key=f"rename_{i}")
+                    new_name = st.text_input("Rename", f['name'], key=f"rename_{i}")
                     if new_name != f['name']:
                         f['name'] = new_name
                         st.success("Renamed")
                         st.rerun()
                 with c2:
                     st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-                    
-                    # SAFE DOWNLOAD LOGIC
                     data_to_download = None
-                    file_ext = "txt"
-                    mime_type = "text/plain"
-
+                    file_ext, mime = "txt", "text/plain"
                     try:
-                        if f.get('content') is not None:
-                            if isinstance(f['content'], Image.Image):
-                                img_byte_arr = io.BytesIO()
-                                f['content'].save(img_byte_arr, format='PNG')
-                                data_to_download = img_byte_arr.getvalue()
-                                file_ext = "png"
-                                mime_type = "image/png"
-                            elif isinstance(f['content'], str):
-                                data_to_download = f['content'].encode("utf-8")
-                            elif isinstance(f['content'], bytes):
-                                data_to_download = f['content']
-                            else:
-                                data_to_download = str(f['content']).encode("utf-8")
-                    except Exception as e:
-                        st.error(f"Error preparing download: {e}")
-
+                        if isinstance(f['content'], Image.Image):
+                            buf = io.BytesIO()
+                            f['content'].save(buf, format="PNG")
+                            data_to_download, file_ext, mime = buf.getvalue(), "png", "image/png"
+                        else:
+                            data_to_download = str(f['content']).encode("utf-8")
+                    except: pass
+                    
                     if data_to_download:
-                        st.download_button(
-                            label="Download", 
-                            data=data_to_download, 
-                            file_name=f"medilink_file_{i}.{file_ext}", 
-                            mime=mime_type, 
-                            key=f"dl_{i}", 
-                            use_container_width=True
-                        )
-                    else:
-                        st.warning("Download unavailable")
-
+                        st.download_button("Download", data_to_download, f"file_{i}.{file_ext}", mime, key=f"dl_{i}", use_container_width=True)
+                
                 st.markdown("---")
-                if isinstance(f['content'], Image.Image):
-                    st.image(f['content'], use_container_width=True)
-                else:
-                    st.text_area("File Content", str(f['content']), height=200, key=f"prev_{i}")
-                if f['summary'] != "Pending":
-                    st.markdown("#### Clinical Summary")
-                    st.write(f['summary'])
+                if isinstance(f['content'], Image.Image): st.image(f['content'], use_container_width=True)
+                else: st.text_area("Content", str(f['content']), height=150, key=f"p_{i}")
+                if f['summary'] != "Pending": st.write(f['summary'])
