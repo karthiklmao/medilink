@@ -153,6 +153,10 @@ st.markdown("---")
 # --- HELPER FUNCTIONS ---
 
 def encode_image(image):
+    # FIX: Convert transparent images (RGBA) to solid (RGB) before saving as JPEG
+    if image.mode == 'RGBA':
+        image = image.convert('RGB')
+        
     buffered = io.BytesIO()
     image.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
@@ -180,7 +184,7 @@ def get_groq_response(api_key, content, prompt):
                     ]
                 }
             ]
-            # UPDATED MODEL NAME - Old one was decommissioned
+            # UPDATED MODEL NAME
             model = "meta-llama/llama-4-scout-17b-16e-instruct" 
             
         # CASE 2: TEXT (Llama 3 70B)
